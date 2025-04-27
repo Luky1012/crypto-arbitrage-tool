@@ -1,5 +1,6 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify
 import requests
+import sqlite3
 
 app = Flask(__name__)
 
@@ -19,12 +20,7 @@ def fetch_real_time_prices():
             try:
                 if exchange == 'Binance':
                     response = requests.get(url, params={'symbol': f'{symbol}USDT'})
-                    data = response.json()
-                    if 'price' in data:
-                        price = float(data['price'])
-                    else:
-                        print(f"Unexpected response from Binance for {symbol}: {data}")
-                        continue
+                    price = float(response.json()['price'])
                 elif exchange == 'Coinbase':
                     response = requests.get(url.format(symbol=f'{symbol}-USD'))
                     price = float(response.json()['price'])
@@ -70,6 +66,12 @@ def dashboard():
             }
 
     return render_template('dashboard.html', crypto_data=crypto_data, exchanges=exchanges, arbitrage_data=arbitrage_data)
+
+@app.route('/update_prices')
+def update_prices():
+    # Fetch real-time prices
+    crypto_data, _ = fetch_real_time_prices()
+    return jsonify(crypto_data)
 
 if __name__ == '__main__':
     app.run(debug=True)

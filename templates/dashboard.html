@@ -93,7 +93,7 @@
             margin-top: 20px;
         }
 
-        /* Loading Spinner (Optional) */
+        /* Loading Spinner */
         .loader {
             position: fixed;
             top: 50%;
@@ -122,7 +122,7 @@
     <div class="loader"></div>
 
     <h1>Crypto Arbitrage Dashboard</h1>
-    <table>
+    <table id="crypto-table">
         <thead>
             <tr>
                 <th>Cryptocurrency</th>
@@ -134,10 +134,10 @@
         </thead>
         <tbody>
             {% for symbol, prices in crypto_data.items() %}
-            <tr>
+            <tr data-symbol="{{ symbol }}">
                 <td data-label="Cryptocurrency">{{ symbol }}</td>
                 {% for exchange in exchanges %}
-                <td data-label="{{ exchange }}">
+                <td data-label="{{ exchange }}" data-exchange="{{ exchange }}">
                     {% if prices[exchange] is not none %}
                     ${{ "%.2f"|format(prices[exchange]) }}
                     {% else %}
@@ -157,19 +157,48 @@
         </tbody>
     </table>
 
-    <!-- Auto-refresh Indicator -->
+    <!-- Footer -->
     <footer>
-        Page will refresh automatically every 10 seconds...
-        <script>
-            setTimeout(function() {
-                window.location.reload();
-            }, 10000); // 10 seconds
-
-            // Hide loader after page load
-            document.addEventListener("DOMContentLoaded", function() {
-                document.body.classList.add("loaded");
-            });
-        </script>
+        Prices update automatically every 2 seconds...
     </footer>
+
+    <!-- JavaScript for Real-Time Updates -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Hide loader after page load
+            document.body.classList.add("loaded");
+
+            // Function to update prices dynamically
+            async function updatePrices() {
+                try {
+                    const response = await fetch('/update_prices');
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    const data = await response.json();
+
+                    // Update the table with new prices
+                    for (const [symbol, prices] of Object.entries(data)) {
+                        const row = document.querySelector(`tr[data-symbol="${symbol}"]`);
+                        if (row) {
+                            row.querySelectorAll('[data-exchange]').forEach(cell => {
+                                const exchange = cell.getAttribute('data-exchange');
+                                if (prices[exchange] !== undefined) {
+                                    cell.textContent = `$${(prices[exchange]).toFixed(2)}`;
+                                } else {
+                                    cell.textContent = 'N/A';
+                                }
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error updating prices:', error);
+                }
+            }
+
+            // Update prices every 2 seconds
+            setInterval(updatePrices, 2000);
+        });
+    </script>
 </body>
 </html>
