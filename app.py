@@ -19,7 +19,12 @@ def fetch_real_time_prices():
             try:
                 if exchange == 'Binance':
                     response = requests.get(url, params={'symbol': f'{symbol}USDT'})
-                    price = float(response.json()['price'])
+                    data = response.json()
+                    if 'price' in data:
+                        price = float(data['price'])
+                    else:
+                        print(f"Unexpected response from Binance for {symbol}: {data}")
+                        continue
                 elif exchange == 'Coinbase':
                     response = requests.get(url.format(symbol=f'{symbol}-USD'))
                     price = float(response.json()['price'])
