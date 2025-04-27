@@ -1,16 +1,126 @@
 <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Arbitrage Dashboard</title>
+    <style>
+        /* General Styles */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f6f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 2rem;
+            color: #2c3e50;
         }
 
-        /* Auto-refresh Indicator */
+        /* Table Styles */
+        table {
+            width: 95%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #2c3e50;
+            color: #fff;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        tr:hover {
+            background-color: #f9fafb;
+        }
+        .highlight {
+            background-color: #ffeb3b; /* Yellow highlight for arbitrage opportunities */
+            font-weight: bold;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+
+            thead tr {
+                display: none;
+            }
+
+            tr {
+                margin-bottom: 15px;
+                border: 1px solid #ccc;
+                border-radius: 8px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            }
+
+            td {
+                text-align: right;
+                padding-left: 50%;
+                position: relative;
+            }
+
+            td::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 10px;
+                font-weight: bold;
+                text-transform: uppercase;
+                font-size: 12px;
+                text-align: left;
+                color: #2c3e50;
+            }
+        }
+
+        /* Footer */
         footer {
             text-align: center;
             font-size: 12px;
             color: #666;
             margin-top: 20px;
         }
+
+        /* Loading Spinner (Optional) */
+        .loader {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #2c3e50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Hide Loader After Page Load */
+        body.loaded .loader {
+            display: none;
+        }
     </style>
 </head>
 <body>
+    <!-- Loading Spinner -->
+    <div class="loader"></div>
+
     <h1>Crypto Arbitrage Dashboard</h1>
     <table>
         <thead>
@@ -47,13 +157,18 @@
         </tbody>
     </table>
 
-    <!-- Auto-refresh the page every 10 seconds -->
+    <!-- Auto-refresh Indicator -->
     <footer>
         Page will refresh automatically every 10 seconds...
         <script>
             setTimeout(function() {
                 window.location.reload();
             }, 10000); // 10 seconds
+
+            // Hide loader after page load
+            document.addEventListener("DOMContentLoaded", function() {
+                document.body.classList.add("loaded");
+            });
         </script>
     </footer>
 </body>
