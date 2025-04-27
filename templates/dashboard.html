@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+                <th>{{ exchange }}</th>
+                {% endfor %}
+                <th>Arbitrage Opportunity</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for symbol, prices in crypto_data.items() %}
+            <tr>
+                <td data-label="Cryptocurrency">{{ symbol }}</td>
+                {% for exchange in exchanges %}
+                <td data-label="{{ exchange }}">
+                    {% if prices[exchange] is not none %}
+                    ${{ "%.2f"|format(prices[exchange]) }}
+                    {% else %}
+                    N/A
+                    {% endif %}
+                </td>
+                {% endfor %}
+                <td data-label="Arbitrage Opportunity" class="{{ 'highlight' if arbitrage_data[symbol]['is_profitable'] else '' }}">
+                    {% if arbitrage_data[symbol]['is_profitable'] %}
+                    Profitable (Difference: ${{ "%.2f"|format(arbitrage_data[symbol]['profit']) }})
+                    {% else %}
+                    Not Profitable
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Auto-refresh the page every 10 seconds -->
+    <footer>
+        Page will refresh automatically every 10 seconds...
+        <script>
+            setTimeout(function() {
+                window.location.reload();
+            }, 10000); // 10 seconds
+        </script>
+    </footer>
+</body>
+</html>
