@@ -9,17 +9,17 @@ app = Flask(__name__)
 
 # Exchange API configurations
 BINANCE_API_URL = "https://testnet.binance.vision"
-BINANCE_API_KEY = "ajjlQ0AmtZI78Ld9dxboDFizkfr4oqv76Z6sX4YvZQcAL5e4YMW5nr9jnhgNKDv6"
-BINANCE_SECRET_KEY = "4P3AV79Wg8Lhs6wQIqRKhWy9Bsl25OyfL1YuVXiKtUFhAAbedcZHlGYGTDDtdGUf"
+BINANCE_API_KEY = "your_binance_testnet_api_key"
+BINANCE_SECRET_KEY = "your_binance_testnet_secret_key"
 
 OKX_API_URL = "https://www.okx.com"
-OKX_API_KEY = "f7125503-a272-404f-ba05-bd934ba4e653"
-OKX_SECRET_KEY = "5271E44AC0BB0EB0370320E80F4F450E"
-OKX_PASSPHRASE = "Ahmed881987@"
+OKX_API_KEY = "your_okx_sandbox_api_key"
+OKX_SECRET_KEY = "your_okx_sandbox_secret_key"
+OKX_PASSPHRASE = "your_okx_sandbox_passphrase"
 
 # Fetch real-time prices from Binance Testnet
 def fetch_binance_prices():
-    symbols = ['BTCUSDT', 'ETHUSDT']
+    symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'SOLUSDT', 'ADAUSDT']
     prices = {}
     for symbol in symbols:
         try:
@@ -34,7 +34,7 @@ def fetch_binance_prices():
 
 # Fetch real-time prices from OKX Sandbox
 def fetch_okx_prices():
-    symbols = ['BTC-USDT', 'ETH-USDT']
+    symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'SOL-USDT', 'ADA-USDT']
     prices = {}
     for symbol in symbols:
         try:
@@ -108,7 +108,7 @@ def dashboard():
 
     # Combine prices into a single dictionary
     crypto_data = {}
-    for symbol in ['BTC', 'ETH']:
+    for symbol in ['BTC', 'ETH', 'XRP', 'SOL', 'ADA']:
         binance_symbol = f"{symbol}USDT"
         okx_symbol = f"{symbol}-USDT"
         crypto_data[symbol] = {
@@ -146,16 +146,20 @@ def dashboard():
 def execute_trade(symbol, buy_exchange, sell_exchange):
     try:
         # Example: Buy on Binance, sell on OKX
+        quantity = 0.01  # Adjust this value based on your test funds
         if buy_exchange == "Binance" and sell_exchange == "OKX":
-            execute_binance_trade(f"{symbol}USDT", "BUY", 0.01)  # Buy 0.01 BTC
-            execute_okx_trade(f"{symbol}-USDT", "sell", 0.01)  # Sell 0.01 BTC
-            return jsonify({"message": f"Executed trade: Buy {symbol} on Binance, sell on OKX"})
+            buy_response = execute_binance_trade(f"{symbol}USDT", "BUY", quantity)
+            sell_response = execute_okx_trade(f"{symbol}-USDT", "sell", quantity)
+            message = f"Executed trade: Buy {symbol} on Binance, sell on OKX. Buy Response: {buy_response}, Sell Response: {sell_response}"
         elif buy_exchange == "OKX" and sell_exchange == "Binance":
-            execute_okx_trade(f"{symbol}-USDT", "buy", 0.01)  # Buy 0.01 BTC
-            execute_binance_trade(f"{symbol}USDT", "SELL", 0.01)  # Sell 0.01 BTC
-            return jsonify({"message": f"Executed trade: Buy {symbol} on OKX, sell on Binance"})
+            buy_response = execute_okx_trade(f"{symbol}-USDT", "buy", quantity)
+            sell_response = execute_binance_trade(f"{symbol}USDT", "SELL", quantity)
+            message = f"Executed trade: Buy {symbol} on OKX, sell on Binance. Buy Response: {buy_response}, Sell Response: {sell_response}"
         else:
             return jsonify({"message": "Invalid trade parameters"})
+        
+        # Return detailed trade execution status
+        return jsonify({"message": message})
     except Exception as e:
         return jsonify({"message": f"Error executing trade: {str(e)}"})
 

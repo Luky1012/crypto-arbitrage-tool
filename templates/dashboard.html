@@ -176,4 +176,35 @@
                         const row = document.querySelector(`tr[data-symbol="${symbol}"]`);
                         if (row) {
                             row.querySelectorAll('[data-exchange]').forEach(cell => {
-                                const exchange = cell.getAttribute('data-exchange
+                                const exchange = cell.getAttribute('data-exchange');
+                                if (prices[exchange] !== undefined) {
+                                    cell.textContent = `$${(prices[exchange]).toFixed(2)}`;
+                                } else {
+                                    cell.textContent = 'N/A';
+                                }
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error updating prices:', error);
+                }
+            }
+
+            // Update prices every 2 seconds
+            setInterval(updatePrices, 2000);
+        });
+
+        function executeTrade(symbol, buyExchange, sellExchange) {
+            fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message); // Show detailed trade execution status
+                })
+                .catch(error => {
+                    console.error('Error executing trade:', error);
+                    alert('An error occurred while executing the trade.');
+                });
+        }
+    </script>
+</body>
+</html>
