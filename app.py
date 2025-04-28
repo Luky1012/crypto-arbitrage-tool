@@ -9,13 +9,13 @@ app = Flask(__name__)
 
 # Exchange API configurations
 BINANCE_API_URL = "https://testnet.binance.vision"
-BINANCE_API_KEY = "your_binance_testnet_api_key"
-BINANCE_SECRET_KEY = "your_binance_testnet_secret_key"
+BINANCE_API_KEY = "TvXOHbucvM7oAvA7LxM0f7PWEMApLwYSdYdUnaa2xhlF5n67T5R29fQDZMch9u5X"
+BINANCE_SECRET_KEY = "Pcv0OieXCumybk1mi7ZJnZ6uKpOqUbgyjvyDymRx5MtcT5I1wZLSs9DIA8Ivwd62"
 
 OKX_API_URL = "https://www.okx.com"
-OKX_API_KEY = "your_okx_sandbox_api_key"
-OKX_SECRET_KEY = "your_okx_sandbox_secret_key"
-OKX_PASSPHRASE = "your_okx_sandbox_passphrase"
+OKX_API_KEY = "f7125503-a272-404f-ba05-bd934ba4e653"
+OKX_SECRET_KEY = "5271E44AC0BB0EB0370320E80F4F450E"
+OKX_PASSPHRASE = "Ahmed881987@"
 
 # Fetch real-time prices from Binance Testnet
 def fetch_binance_prices():
@@ -165,3 +165,24 @@ def execute_trade(symbol, buy_exchange, sell_exchange):
 
 if __name__ == '__main__':
     app.run(debug=True)
+    import os
+
+# Load API keys from environment variables
+BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
+BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
+OKX_API_KEY = os.getenv("OKX_API_KEY")
+OKX_SECRET_KEY = os.getenv("OKX_SECRET_KEY")
+OKX_PASSPHRASE = os.getenv("OKX_PASSPHRASE")
+
+# Debugging: Print API keys to confirm they are loaded
+print(f"BINANCE_API_KEY: {BINANCE_API_KEY}")
+print(f"BINANCE_SECRET_KEY: {BINANCE_SECRET_KEY}")
+print(f"OKX_API_KEY: {OKX_API_KEY}")
+print(f"OKX_SECRET_KEY: {OKX_SECRET_KEY}")
+print(f"OKX_PASSPHRASE: {OKX_PASSPHRASE}")
+
+# Check if any API key is missing
+if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
+    raise ValueError("Binance API keys are missing or invalid.")
+if not OKX_API_KEY or not OKX_SECRET_KEY or not OKX_PASSPHRASE:
+    raise ValueError("OKX API keys are missing or invalid.")
