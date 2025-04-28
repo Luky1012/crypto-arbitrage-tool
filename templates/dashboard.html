@@ -126,31 +126,25 @@
         <thead>
             <tr>
                 <th>Cryptocurrency</th>
-                {% for exchange in exchanges %}
-                <th>{{ exchange }}</th>
-                {% endfor %}
+                <th>Binance</th>
+                <th>OKX</th>
                 <th>Arbitrage Opportunity</th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody>
-            {% for symbol, prices in crypto_data.items() %}
-            <tr data-symbol="{{ symbol }}">
-                <td data-label="Cryptocurrency">{{ symbol }}</td>
-                {% for exchange in exchanges %}
-                <td data-label="{{ exchange }}" data-exchange="{{ exchange }}">
-                    {% if prices[exchange] is not none %}
-                    ${{ "%.2f"|format(prices[exchange]) }}
-                    {% else %}
-                    N/A
-                    {% endif %}
+            {% for opportunity in arbitrage_opportunities %}
+            <tr>
+                <td>{{ opportunity.symbol }}</td>
+                <td>${{ "%.2f"|format(crypto_data[opportunity.symbol]['Binance']) }}</td>
+                <td>${{ "%.2f"|format(crypto_data[opportunity.symbol]['OKX']) }}</td>
+                <td>
+                    Profitable (Difference: ${{ "%.2f"|format(opportunity.profit) }})
                 </td>
-                {% endfor %}
-                <td data-label="Arbitrage Opportunity" class="{{ 'highlight' if arbitrage_data[symbol]['is_profitable'] else '' }}">
-                    {% if arbitrage_data[symbol]['is_profitable'] %}
-                    Profitable (Difference: ${{ "%.2f"|format(arbitrage_data[symbol]['profit']) }})
-                    {% else %}
-                    Not Profitable
-                    {% endif %}
+                <td>
+                    <button onclick="executeTrade('{{ opportunity.symbol }}', '{{ opportunity.buy_on }}', '{{ opportunity.sell_on }}')">
+                        Execute Trade
+                    </button>
                 </td>
             </tr>
             {% endfor %}
@@ -182,23 +176,4 @@
                         const row = document.querySelector(`tr[data-symbol="${symbol}"]`);
                         if (row) {
                             row.querySelectorAll('[data-exchange]').forEach(cell => {
-                                const exchange = cell.getAttribute('data-exchange');
-                                if (prices[exchange] !== undefined) {
-                                    cell.textContent = `$${(prices[exchange]).toFixed(2)}`;
-                                } else {
-                                    cell.textContent = 'N/A';
-                                }
-                            });
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error updating prices:', error);
-                }
-            }
-
-            // Update prices every 2 seconds
-            setInterval(updatePrices, 2000);
-        });
-    </script>
-</body>
-</html>
+                                const exchange = cell.getAttribute('data-exchange
