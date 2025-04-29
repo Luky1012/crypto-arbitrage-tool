@@ -4,18 +4,33 @@ import hmac
 import hashlib
 import time
 import json
+import os  # Import the os module to access environment variables
 
 app = Flask(__name__)
 
+# Load API keys from environment variables
+BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
+BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
+OKX_API_KEY = os.getenv("OKX_API_KEY")
+OKX_SECRET_KEY = os.getenv("OKX_SECRET_KEY")
+OKX_PASSPHRASE = os.getenv("OKX_PASSPHRASE")
+
+# Debugging: Print API keys to confirm they are loaded
+print(f"BINANCE_API_KEY: {BINANCE_API_KEY}")
+print(f"BINANCE_SECRET_KEY: {BINANCE_SECRET_KEY}")
+print(f"OKX_API_KEY: {OKX_API_KEY}")
+print(f"OKX_SECRET_KEY: {OKX_SECRET_KEY}")
+print(f"OKX_PASSPHRASE: {OKX_PASSPHRASE}")
+
+# Check if any API key is missing
+if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
+    raise ValueError("Binance API keys are missing or invalid.")
+if not OKX_API_KEY or not OKX_SECRET_KEY or not OKX_PASSPHRASE:
+    raise ValueError("OKX API keys are missing or invalid.")
+
 # Exchange API configurations
 BINANCE_API_URL = "https://testnet.binance.vision"
-BINANCE_API_KEY = "TvXOHbucvM7oAvA7LxM0f7PWEMApLwYSdYdUnaa2xhlF5n67T5R29fQDZMch9u5X"
-BINANCE_SECRET_KEY = "Pcv0OieXCumybk1mi7ZJnZ6uKpOqUbgyjvyDymRx5MtcT5I1wZLSs9DIA8Ivwd62"
-
 OKX_API_URL = "https://www.okx.com"
-OKX_API_KEY = "f7125503-a272-404f-ba05-bd934ba4e653"
-OKX_SECRET_KEY = "5271E44AC0BB0EB0370320E80F4F450E"
-OKX_PASSPHRASE = "Ahmed881987@"
 
 # Fetch real-time prices from Binance Testnet
 def fetch_binance_prices():
@@ -76,7 +91,7 @@ def execute_binance_trade(symbol, side, quantity):
 
 # Execute a trade on OKX Sandbox
 def execute_okx_trade(symbol, side, size):
-    timestamp = str(int(time.time()))
+    timestamp = str(int(time.time() * 1000))  # Convert to milliseconds
     method = "POST"
     request_path = "/api/v5/trade/order"
     body = {
@@ -145,8 +160,12 @@ def dashboard():
 @app.route('/execute_trade/<symbol>/<buy_exchange>/<sell_exchange>')
 def execute_trade(symbol, buy_exchange, sell_exchange):
     try:
-        # Example: Buy on Binance, sell on OKX
-        quantity = 0.01  # Adjust this value based on your test funds
+        # Adjust quantity based on minimum notional value
+        binance_prices = fetch_binance_prices()
+        price = binance_prices.get(f"{symbol}USDT", 0)
+        min_notional = 10  # Minimum notional value for Binance (adjust as needed)
+        quantity = max(0.01, min_notional / price) if price > 0 else 0.01
+
         if buy_exchange == "Binance" and sell_exchange == "OKX":
             buy_response = execute_binance_trade(f"{symbol}USDT", "BUY", quantity)
             sell_response = execute_okx_trade(f"{symbol}-USDT", "sell", quantity)
@@ -158,31 +177,9 @@ def execute_trade(symbol, buy_exchange, sell_exchange):
         else:
             return jsonify({"message": "Invalid trade parameters"})
         
-        # Return detailed trade execution status
         return jsonify({"message": message})
     except Exception as e:
         return jsonify({"message": f"Error executing trade: {str(e)}"})
 
 if __name__ == '__main__':
     app.run(debug=True)
-    import os
-
-# Load API keys from environment variables
-BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
-BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
-OKX_API_KEY = os.getenv("OKX_API_KEY")
-OKX_SECRET_KEY = os.getenv("OKX_SECRET_KEY")
-OKX_PASSPHRASE = os.getenv("OKX_PASSPHRASE")
-
-# Debugging: Print API keys to confirm they are loaded
-print(f"BINANCE_API_KEY: {BINANCE_API_KEY}")
-print(f"BINANCE_SECRET_KEY: {BINANCE_SECRET_KEY}")
-print(f"OKX_API_KEY: {OKX_API_KEY}")
-print(f"OKX_SECRET_KEY: {OKX_SECRET_KEY}")
-print(f"OKX_PASSPHRASE: {OKX_PASSPHRASE}")
-
-# Check if any API key is missing
-if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
-    raise ValueError("Binance API keys are missing or invalid.")
-if not OKX_API_KEY or not OKX_SECRET_KEY or not OKX_PASSPHRASE:
-    raise ValueError("OKX API keys are missing or invalid.")
