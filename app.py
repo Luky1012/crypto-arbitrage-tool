@@ -90,8 +90,18 @@ def get_binance_lot_size(symbol):
     return None
 
 def round_quantity(quantity, step_size):
-    precision = len(str(step_size).split('.')[1]) if '.' in str(step_size) else 0
-    return round(quantity, precision)
+    if step_size == 0:
+        return quantity
+
+    # Determine number of decimal places
+    step_size_str = "{0:.8f}".format(step_size).rstrip('0').rstrip('.')
+    decimal_places = len(step_size_str.split('.')[1]) if '.' in step_size_str else 0
+
+    # Round to correct precision
+    rounded = round(quantity, decimal_places)
+
+    # Ensure no extra trailing decimals due to float imprecision
+    return float(f"{rounded:.{decimal_places}f}")
 
 def sign_okx_request(timestamp, method, request_path, body=""):
     message = f"{timestamp}{method}{request_path}{body}"
@@ -101,29 +111,37 @@ def sign_okx_request(timestamp, method, request_path, body=""):
     return signature
 
 def execute_binance_trade(symbol, side, quantity):
-    # Get accurate server time
-    server_time = get_binance_server_time()
+    try:
+        # Always use Binance server time
+        server_time = get_binance_server_time()
 
-    query_string = f"symbol={symbol}&side={side.upper()}&type=MARKET&quantity={quantity}&timestamp={server_time}"
-    signature = hmac.new(
-        BINANCE_SECRET_KEY.encode('utf-8'),
-        query_string.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
+        # Format the query string
+        query_string = f"symbol={symbol}&side={side.upper()}&type=MARKET&quantity={quantity}&timestamp={server_time}"
 
-    headers = {"X-MBX-APIKEY": BINANCE_API_KEY}
-    params = {
-        "symbol": symbol,
-        "side": side.upper(),
-        "type": "MARKET",
-        "quantity": quantity,
-        "timestamp": server_time,
-        "signature": signature
-    }
+        # Sign the request
+        signature = hmac.new(
+            BINANCE_SECRET_KEY.encode('utf-8'),
+            query_string.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
 
-    url = f"{BINANCE_API_URL}/api/v3/order"
-    response = requests.post(url, headers=headers, params=params)
-    return response.json()
+        headers = {"X-MBX-APIKEY": BINANCE_API_KEY}
+        params = {
+            "symbol": symbol,
+            "side": side.upper(),
+            "type": "MARKET",
+            "quantity": quantity,
+            "timestamp": server_time,
+            "signature": signature
+        }
+
+        url = f"{BINANCE_API_URL}/api/v3/order"
+        response = requests.post(url, headers=headers, params=params, timeout=10)
+        return response.json()
+    
+    except Exception as e:
+        app.logger.error(f"Binance trade execution error: {e}")
+        return {"error": str(e)}
 
 def execute_okx_trade(symbol, side, size):
     timestamp = str(int(time.time() * 1000))
