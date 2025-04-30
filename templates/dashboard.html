@@ -131,8 +131,31 @@
 <footer>
     Prices refresh every 1 second...
 </footer>
-
-<script>
+<h2>Recent Trades</h2>
+<table border="1">
+    <tr>
+        <th>Time</th>
+        <th>Symbol</th>
+        <th>Buy</th>
+        <th>Sell</th>
+        <th>Status</th>
+        <th>Profit</th>
+    </tr>
+    {% if trade_history %}
+        {% for trade in trade_history %}
+        <tr>
+            <td>{{ trade.timestamp }}</td>
+            <td>{{ trade.symbol }}</td>
+            <td>{{ trade.buy_exchange }}</td>
+            <td>{{ trade.sell_exchange }}</td>
+            <td>{{ trade.status }}</td>
+            <td>${{ "%.2f"|format(trade.profit) if trade.profit else "N/A" }}</td>
+        </tr>
+        {% endfor %}
+    {% else %}
+        <tr><td colspan="5">No trades yet.</td></tr>
+    {% endif %}
+</table>
 document.addEventListener("DOMContentLoaded", () => {
     document.body.classList.add("loaded");
 
@@ -173,12 +196,13 @@ document.addEventListener("DOMContentLoaded", () => {
     updatePrices();
     setInterval(updatePrices, 1000);
 
-    function executeTrade(symbol, buyExchange, sellExchange) {
-        const url = `/execute_trade/${symbol}/${buyExchange}/${sellExchange}`;
-        
-        alert("Sending trade request for " + symbol + "..."); // Confirm button click
 
-        fetch(url)
+    function executeTrade(symbol, buyExchange, sellExchange) {
+        const confirmation = confirm(`Execute trade:\nBuy ${symbol} on ${buyExchange},\nSell ${symbol} on ${sellExchange}?`);
+
+        if (!confirmation) return;
+
+        fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
             .then(async (response) => {
                 if (!response.ok) {
                     const errText = await response.text();
@@ -187,20 +211,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 return response.json();
             })
             .then(data => {
-                console.log("Raw server response:", data);
-
                 if (data.success === false) {
-                    alert(`⚠️ Trade failed:\n\n${data.error || JSON.stringify(data)}`);
+                    alert("🚨 ERROR:\n" + (data.message || data.error || JSON.stringify(data)));
                 } else {
-                    alert(`✅ Success!\n\n${data.message}`);
+                    alert("✅ SUCCESS:\n" + data.message);
                 }
             })
             .catch(error => {
                 console.error("Frontend error:", error);
-                alert(`🚨 Network error:\n${error.message}`);
+                alert("🚨 Network error:\n" + error.message);
             });
     }
-</script>
+
 
 </body>
 </html>
