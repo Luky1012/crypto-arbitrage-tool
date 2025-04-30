@@ -1,6 +1,9 @@
 from dotenv import load_dotenv
 import os
 
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
+    
 # Load environment variables from .env
 load_dotenv()
 
@@ -22,6 +25,11 @@ def get_binance_server_time():
     url = "https://testnet.binance.vision/api/v3/time"
     response = requests.get(url)
     return response.json()['serverTime']
+def get_okx_server_time():
+    url = "https://www.okx.com/api/v5/public/time"
+    response = requests.get(url)
+    data = response.json()
+    return int(float(data['data'][0]['ts']))  # Extract server timestamp (in ms)
 
 # Exchange API configurations
 BINANCE_API_URL = "https://testnet.binance.vision"
@@ -144,7 +152,8 @@ def execute_binance_trade(symbol, side, quantity):
         return {"error": str(e)}
 
 def execute_okx_trade(symbol, side, size):
-    timestamp = str(int(time.time() * 1000))
+    timestamp = str(get_okx_server_time())  # Use OKX server time instead of local/system time
+
     method = "POST"
     request_path = "/api/v5/trade/order"
     body = {
@@ -152,9 +161,10 @@ def execute_okx_trade(symbol, side, size):
         "tdMode": "cash",
         "side": side.lower(),
         "ordType": "market",
-        "sz": size
+        "sz": str(size)
     }
     body_str = json.dumps(body)
+
     signature = sign_okx_request(timestamp, method, request_path, body_str)
 
     headers = {
@@ -165,8 +175,16 @@ def execute_okx_trade(symbol, side, size):
         "Content-Type": "application/json"
     }
 
-    response = requests.post(f"{OKX_API_URL}{request_path}", headers=headers, data=body_str)
-    return response.json()
+    try:
+        response = requests.post(
+            f"{OKX_API_URL}{request_path}",
+            headers=headers,
+            data=body_str,
+            timeout=10
+        )
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
 
 # --- Routes ---
 
