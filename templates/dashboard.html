@@ -93,12 +93,33 @@ setInterval(updatePrices, 1000);
     });
 
     function executeTrade(symbol, buyExchange, sellExchange) {
-        fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
-            .then(res => res.json())
-            .then(data => alert(data.message))
-            .catch(err => alert("Trade execution failed."));
+        const url = `/execute_trade/${symbol}/${buyExchange}/${sellExchange}`;
+        
+        alert("Sending trade request for " + symbol + "..."); // Optional: Confirm click received
+
+        fetch(url)
+            .then(async (response) => {
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP error! Status: ${response.status}, Body: ${errText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("Raw server response:", data);
+
+                if (data.success === false) {
+                    alert(`⚠️ Trade failed:\n\n${data.error || JSON.stringify(data)}`);
+                } else {
+                    alert(`✅ Success!\n\n${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error("Frontend error:", error);
+                alert(`🚨 Network error:\n${error.message}`);
+            });
     }
-</script>
+
 
 </body>
 </html>

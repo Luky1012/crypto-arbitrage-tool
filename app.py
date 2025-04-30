@@ -201,38 +201,86 @@ def update_prices():
 @app.route('/execute_trade/<symbol>/<buy_exchange>/<sell_exchange>')
 def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
     try:
-        name_map = SUPPORTED_SYMBOLS[symbol]
+        name_map = SUPPORTED_SYMBOLS.get(symbol.upper())
+        if not name_map:
+            return jsonify({
+                "success": False,
+                "error": f"Invalid symbol: {symbol}"
+            }), 400
+
         binance_symbol = name_map['binance']
         okx_symbol = name_map['okx']
 
-        # Get price for quantity calculation
+        # Get price from Binance
         binance_prices = fetch_binance_prices()
         price = binance_prices.get(binance_symbol, 0)
-        min_notional = 10  # Minimum USD amount
+
+        min_notional = 10  # Min USD value for trade
         raw_quantity = max(0.01, min_notional / price) if price > 0 else 0.01
 
         step_size = get_binance_lot_size(binance_symbol)
         if not step_size:
-            return jsonify({"message": f"Failed to fetch LOT_SIZE for {binance_symbol}."})
+            return jsonify({
+                "success": False,
+                "error": f"LOT_SIZE not found for {binance_symbol}"
+            }), 500
+
         quantity = round_quantity(raw_quantity, step_size)
 
         if buy_exchange == "Binance" and sell_exchange == "OKX":
             buy_response = execute_binance_trade(binance_symbol, "BUY", quantity)
             sell_response = execute_okx_trade(okx_symbol, "sell", quantity)
-            message = f"Executed trade: Buy {symbol} on Binance, sell on OKX. Responses: Buy - {buy_response}, Sell - {sell_response}"
+
+            if 'code' in buy_response and buy_response['code'] != 200:
+                return jsonify({
+                    "success": False,
+                    "error": f"Binance buy failed: {buy_response.get('msg', 'Unknown error')}",
+                    "raw_response": buy_response
+                })
+
+            if 'code' in sell_response and sell_response['code'] != 200:
+                return jsonify({
+                    "success": False,
+                    "error": f"OKX sell failed: {sell_response.get('msg', 'Unknown error')}",
+                    "raw_response": sell_response
+                })
+
+            return jsonify({
+                "success": True,
+                "message": f"✅ Buy {symbol} on Binance and Sell on OKX.\n\nBinance Buy: {buy_response}\nOKX Sell: {sell_response}"
+            })
 
         elif buy_exchange == "OKX" and sell_exchange == "Binance":
             buy_response = execute_okx_trade(okx_symbol, "buy", quantity)
             sell_response = execute_binance_trade(binance_symbol, "SELL", quantity)
-            message = f"Executed trade: Buy {symbol} on OKX, sell on Binance. Responses: Buy - {buy_response}, Sell - {sell_response}"
+
+            if 'code' in buy_response and buy_response['code'] != 200:
+                return jsonify({
+                    "success": False,
+                    "error": f"OKX buy failed: {buy_response.get('msg', 'Unknown error')}"
+                })
+
+            if 'code' in sell_response and sell_response['code'] != 200:
+                return jsonify({
+                    "success": False,
+                    "error": f"Binance sell failed: {sell_response.get('msg', 'Unknown error')}"
+                })
+
+            return jsonify({
+                "success": True,
+                "message": f"✅ Buy {symbol} on OKX and Sell on Binance.\n\nOKX Buy: {buy_response}\nBinance Sell: {sell_response}"
+            })
 
         else:
-            return jsonify({"message": "Invalid trade parameters."})
-
-        return jsonify({"message": message})
+            return jsonify({
+                "success": False,
+                "error": "Invalid exchange pair"
+            })
 
     except Exception as e:
-        return jsonify({"message": f"Error executing trade: {str(e)}"})
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        app.logger.error(f"Error executing trade: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "message": "Internal server error"
+        }), 500
