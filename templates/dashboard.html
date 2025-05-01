@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Crypto Arbitrage Dashboard</title>
     <style>
+        /* General Styles */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
@@ -19,6 +20,7 @@
             color: #2c3e50;
         }
 
+        /* Table Styles */
         table {
             width: 95%;
             margin: 20px auto;
@@ -48,24 +50,18 @@
         }
 
         .highlight {
-            background-color: #ffeb3b; /* Yellow highlight */
+            background-color: #ffeb3b; /* Yellow highlight for arbitrage opportunities */
             font-weight: bold;
         }
 
+        /* Responsive Design */
         @media (max-width: 768px) {
             table, thead, tbody, th, td, tr {
                 display: block;
             }
 
-            thead {
+            thead tr {
                 display: none;
-            }
-
-            tr {
-                margin-bottom: 15px;
-                border: 1px solid #ccc;
-                border-radius: 8px;
-                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
             }
 
             td {
@@ -84,6 +80,7 @@
             }
         }
 
+        /* Footer */
         footer {
             text-align: center;
             font-size: 12px;
@@ -91,6 +88,7 @@
             margin-top: 20px;
         }
 
+        /* Loader spinner */
         .loader {
             position: fixed;
             top: 50%;
@@ -113,15 +111,13 @@
             display: none;
         }
 
+        /* Trade History Table */
         .trade-history-table {
             width: 95%;
             margin: 30px auto;
-            border: 1px solid #ccc;
+            border-collapse: collapse;
             background-color: #fff;
-        }
-
-        .trade-history-table th, .trade-history-table td {
-            padding: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
 
         .trade-success {
@@ -145,7 +141,7 @@
             <th>Cryptocurrency</th>
             <th>Binance</th>
             <th>OKX</th>
-            <th>Difference ($)</th>
+            <th>Arbitrage Opportunity</th>
             <th>Action</th>
         </tr>
     </thead>
@@ -153,11 +149,9 @@
         {% for coin, prices in crypto_data.items() %}
         <tr data-symbol="{{ coin }}">
             <td>{{ coin }}</td>
-            <td data-exchange="Binance">{{ "%.2f"|format(prices.Binance) if prices.Binance else "N/A" }}</td>
-            <td data-exchange="OKX">{{ "%.2f"|format(prices.OKX) if prices.OKX else "N/A" }}</td>
-            <td id="diff-{{ coin }}">
-                {{ "%.2f"|format(prices.OKX - prices.Binance) if prices.Binance and prices.OKX else "N/A" }}
-            </td>
+            <td data-exchange="Binance">${{ "%.2f"|format(prices.Binance) }}</td>
+            <td data-exchange="OKX">${{ "%.2f"|format(prices.OKX) }}</td>
+            <td id="diff-{{ coin }}">-</td>
             <td>
                 <button onclick="executeTrade('{{ coin }}', 'Binance', 'OKX')">Buy Binance → Sell OKX</button>
                 <button onclick="executeTrade('{{ coin }}', 'OKX', 'Binance')">Buy OKX → Sell Binance</button>
@@ -178,7 +172,7 @@
             <th>Buy On</th>
             <th>Sell On</th>
             <th>Status</th>
-            <th>Profit</th>
+            <th>Profit ($)</th>
         </tr>
     </thead>
     <tbody>
@@ -186,33 +180,36 @@
         <tr>
             <td>{{ trade.time }}</td>
             <td>{{ trade.symbol }}</td>
-            <td>{{ trade.buy_on }}</td>
-            <td>{{ trade.sell_on }}</td>
+            <td>{{ trade.buy_exchange }}</td>
+            <td>{{ trade.sell_exchange }}</td>
             <td class="{% if trade.success %}trade-success{% else %}trade-failed{% endif %}">
-                {{ "✅ Profit" if trade.success else "❌ Failed" }}
+                {{ "✅ SUCCESS" if trade.success else "❌ FAILED" }}
             </td>
-            <td>{{ "%.2f"|format(trade.profit) if trade.profit else "-" }}</td>
+            <td>${{ "%.2f"|format(trade.profit) if trade.profit else "N/A" }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+{% else %}
+<p style="text-align:center; margin-top:30px;">No trades executed yet.</p>
 {% endif %}
 
 <footer>
-    Prices refresh every 1 second...
+    Prices update automatically every second...
 </footer>
 
 <script>
-    document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("DOMContentLoaded", function () {
         document.body.classList.add("loaded");
 
         async function updatePrices() {
             try {
                 const res = await fetch("/update_prices");
-                if (!res.ok) throw new Error("Failed to load prices");
+                if (!res.ok) throw new Error("Network response was not ok");
 
                 const data = await res.json();
 
+                // Update prices in the table
                 Object.entries(data).forEach(([coin, prices]) => {
                     const row = document.querySelector(`tr[data-symbol="${coin}"]`);
                     if (!row) return;
@@ -221,20 +218,29 @@
                     const okxCell = row.querySelector('[data-exchange="OKX"]');
                     const diffCell = document.getElementById(`diff-${coin}`);
 
-                    if (prices.Binance !== undefined) binanceCell.textContent = `$${prices.Binance.toFixed(2)}`;
-                    if (prices.OKX !== undefined) okxCell.textContent = `$${prices.OKX.toFixed(2)}`;
+                    if (prices.Binance !== undefined) {
+                        binanceCell.textContent = `$${prices.Binance.toFixed(2)}`;
+                    } else {
+                        binanceCell.textContent = "N/A";
+                    }
+
+                    if (prices.OKX !== undefined) {
+                        okxCell.textContent = `$${prices.OKX.toFixed(2)}`;
+                    } else {
+                        okxCell.textContent = "N/A";
+                    }
 
                     if (prices.Binance && prices.OKX) {
                         const diff = Math.abs(prices.Binance - prices.OKX);
                         const direction = prices.Binance > prices.OKX ? "Sell Binance | Buy OKX" : "Buy Binance | Sell OKX";
-                        diffCell.innerHTML = `<strong>${direction}</strong><br>$${diff.toFixed(2)}`;
+                        diffCell.innerHTML = `<strong>${direction}</strong><br>Difference: $${diff.toFixed(2)}`;
                         row.classList.toggle("highlight", diff > 0.5);
                     } else {
                         diffCell.textContent = "N/A";
                     }
                 });
-            } catch (err) {
-                console.error("Price update failed:", err);
+            } catch (error) {
+                console.error("Error updating prices:", error);
             }
         }
 
@@ -242,40 +248,29 @@
         updatePrices();
         setInterval(updatePrices, 1000);
 
-    function executeTrade(symbol, buyExchange, sellExchange) {
-        const url = `/execute_trade/${symbol}/${buyExchange}/${sellExchange}`;
-        
-        // Show loading message
-        alert("Sending trade request for " + symbol + "...");
+        // Handle trade execution
+        function executeTrade(symbol, buyExchange, sellExchange) {
+            fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
+                .then(async (response) => {
+                    if (!response.ok) {
+                        const errText = await response.text();
+                        throw new Error(`HTTP error! Status: ${response.status}, Body: ${errText}`);
+                    }
 
-        fetch(url)
-            .then(async (response) => {
-                if (!response.ok) {
-                    const errText = await response.text();
-                    throw new Error(`HTTP error! Status: ${response.status}, Body: ${errText}`);
-                }
-
-                try {
-                    return await response.json();  // Try to parse JSON
-                } catch (jsonError) {
-                    throw new Error("Invalid JSON response from server");
-                }
-            })
-            .then(data => {
-                console.log("Trade response:", data);
-
-                if (data.success === false) {
-                    alert(`⚠️ Trade failed:\n\n${data.message || "Unknown error"}`);
-                } else {
-                    alert(`✅ Success: ${data.message || "Trade executed successfully"}`);
-                }
-            })
-            .catch(error => {
-                console.error("Frontend error:", error);
-                alert(`🚨 Network or API error:\n${error.message}`);
-            });
-    }
-
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success === false) {
+                        alert(`⚠️ Trade failed:\n\n${data.message || JSON.stringify(data)}`);
+                    } else {
+                        alert(`✅ Success:\n\n${data.message || "Trade executed successfully."}`);
+                    }
+                })
+                .catch(error => {
+                    console.error("Frontend error:", error);
+                    alert("🚨 Network or API error.\nCheck browser console for details.");
+                });
+        }
     });
 </script>
 
