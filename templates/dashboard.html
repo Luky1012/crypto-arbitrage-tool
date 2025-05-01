@@ -12,7 +12,7 @@
             color: #333;
         }
 
-        h1 {
+        h1, h2 {
             text-align: center;
             margin: 20px 0;
             font-size: 2rem;
@@ -23,10 +23,8 @@
             width: 95%;
             margin: 20px auto;
             border-collapse: collapse;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             background-color: #fff;
-            border-radius: 8px;
-            overflow: hidden;
         }
 
         th, td {
@@ -49,29 +47,28 @@
             font-weight: bold;
         }
 
-        @media (max-width: 768px) {
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
+        .loader {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 40px; height: 40px; border: 4px solid #f3f3f3;
+            border-top: 4px solid #2c3e50; border-radius: 50%; animation: spin 1s linear infinite;
+        }
 
-            thead tr {
-                display: none;
-            }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-            td::before {
-                content: attr(data-label);
-                position: absolute;
-                left: 10px;
-                font-weight: bold;
-                text-align: left;
-                color: #2c3e50;
-            }
+        body.loaded .loader {
+            display: none;
+        }
 
-            td {
-                text-align: right;
-                padding-left: 50%;
-                position: relative;
-            }
+        .trade-history-table {
+            width: 95%; margin: 20px auto; border-collapse: collapse;
+        }
+
+        .trade-success {
+            color: green;
+        }
+
+        .trade-failed {
+            color: red;
         }
 
         footer {
@@ -79,28 +76,6 @@
             font-size: 12px;
             color: #666;
             margin-top: 20px;
-        }
-
-        .loader {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #2c3e50;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        body.loaded .loader {
-            display: none;
         }
     </style>
 </head>
@@ -116,7 +91,7 @@
             <th>Cryptocurrency</th>
             <th>Binance</th>
             <th>OKX</th>
-            <th>Opportunity ($)</th>
+            <th>Difference ($)</th>
             <th>Action</th>
         </tr>
     </thead>
@@ -138,55 +113,34 @@
 
 <!-- Recent Trades -->
 {% if trade_history %}
-<h2 style="text-align:center;">Recent Trades</h2>
-<table class="trade-history-table" style="width:95%; margin:auto; border-collapse:collapse;">
-    <tr><th>Time</th><th>Coin</th><th>Buy</th><th>Sell</th></tr>
+<h2>Recent Trades</h2>
+<table class="trade-history-table">
+    <tr><th>Time</th><th>Coin</th><th>Buy Price</th><th>Sell Price</th><th>Quantity</th><th>Profit</th></tr>
     {% for trade in trade_history[:5] %}
     <tr>
         <td>{{ trade.time }}</td>
         <td>{{ trade.symbol }}</td>
-        <td>{{ trade.buy_exchange }}</td>
-        <td>{{ trade.sell_exchange }}</td>
+        <td>${{ "%.2f"|format(trade.buy_price) }}</td>
+        <td>${{ "%.2f"|format(trade.sell_price) }}</td>
+        <td>{{ trade.quantity }}</td>
+        <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
+            ${{ "%.2f"|format(trade.profit) }}
+        </td>
     </tr>
     {% endfor %}
 </table>
 {% endif %}
 
-<footer>
-    Prices update every second...
-</footer>
+<footer>Prices refresh every second...</footer>
 
 <script>
-    // Define executeTrade before any button uses it
-    function executeTrade(symbol, buyExchange, sellExchange) {
-        fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
-            .then(async (response) => {
-                if (!response.ok) {
-                    const errText = await response.text();
-                    throw new Error(`HTTP error! Status: ${response.status}, Body: ${errText}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success === false) {
-                    alert("⚠️ Trade failed:\n\n" + (data.message || JSON.stringify(data)));
-                } else {
-                    alert("✅ Success:\n\n" + data.message);
-                }
-            })
-            .catch(error => {
-                console.error("Frontend error:", error);
-                alert("🚨 Network error:\nCheck console for details.");
-            });
-    }
-
     document.addEventListener("DOMContentLoaded", () => {
         document.body.classList.add("loaded");
 
         async function updatePrices() {
             try {
                 const res = await fetch("/update_prices");
-                if (!res.ok) throw new Error("Failed to fetch price updates");
+                if (!res.ok) throw new Error("Failed to update prices");
 
                 const data = await res.json();
 
@@ -204,7 +158,7 @@
                     if (prices.Binance && prices.OKX) {
                         const diff = Math.abs(prices.Binance - prices.OKX);
                         const direction = prices.Binance > prices.OKX ? "Sell Binance | Buy OKX" : "Buy Binance | Sell OKX";
-                        diffCell.innerHTML = `${direction}<br>$<strong>${diff.toFixed(2)}</strong>`;
+                        diffCell.innerHTML = `<strong>${direction}</strong><br>$${diff.toFixed(2)}`;
                         row.classList.toggle("highlight", diff > 0.5);
                     } else {
                         diffCell.textContent = "N/A";
@@ -215,9 +169,27 @@
             }
         }
 
-        updatePrices();
         setInterval(updatePrices, 1000);
+        updatePrices();
     });
+
+    function executeTrade(symbol, buyExchange, sellExchange) {
+        fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
+            .then(async (response) => {
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP error! Status: ${response.status}, Body: ${errText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert(`✅ Trade executed:\n\n${data.message}`);
+            })
+            .catch(error => {
+                console.error("Frontend JS error:", error);
+                alert("🚨 Trade failed.\nCheck browser console.");
+            });
+    }
 </script>
 
 </body>
