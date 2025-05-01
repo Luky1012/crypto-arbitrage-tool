@@ -510,4 +510,6 @@ scheduler.add_job(check_arbitrage_opportunities, 'interval', seconds=5)
 scheduler.start()
 
 if __name__ == '__main__':
+    # For local development only
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
     app.run(debug=False)
