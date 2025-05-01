@@ -1,4 +1,43 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -59,7 +98,7 @@
             display: none;
         }
 
-        .trade-history-table {
+        .trade-history-table, .balance-table {
             width: 95%; margin: 20px auto; border-collapse: collapse;
         }
 
@@ -71,20 +110,66 @@
             color: red;
         }
 
+        #trade-status {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 50%;
+            margin: 20px auto;
+            text-align: center;
+        }
+
         footer {
             text-align: center;
             font-size: 12px;
             color: #666;
             margin-top: 20px;
         }
+
+        button {
+            padding: 8px 12px;
+            margin: 0 5px;
+            background-color: #2c3e50;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #34495e;
+        }
     </style>
 </head>
 <body>
-
 <div class="loader"></div>
 
 <h1>Crypto Arbitrage Dashboard</h1>
 
+<!-- Balances -->
+<h2>Account Balances</h2>
+<table class="balance-table">
+    <thead>
+        <tr>
+            <th>Asset</th>
+            <th>Binance</th>
+            <th>OKX</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for asset in ['USDT', 'BTC', 'ETH', 'XRP', 'SOL', 'ADA'] %}
+        <tr>
+            <td>{{ asset }}</td>
+            <td>{{ "%.4f"|format(binance_balances.get(asset, 0)) }}</td>
+            <td>{{ "%.4f"|format(okx_balances.get(asset, 0)) }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Prices -->
+<h2>Market Prices</h2>
 <table id="crypto-table">
     <thead>
         <tr>
@@ -99,8 +184,8 @@
         {% for coin, prices in crypto_data.items() %}
         <tr data-symbol="{{ coin }}">
             <td>{{ coin }}</td>
-            <td data-exchange="Binance">${{ "%.2f"|format(prices.Binance) }}</td>
-            <td data-exchange="OKX">${{ "%.2f"|format(prices.OKX) }}</td>
+            <td data-exchange="Binance">${{ "%.2f"|format(prices.Binance or 0) }}</td>
+            <td data-exchange="OKX">${{ "%.2f"|format(prices.OKX or 0) }}</td>
             <td id="diff-{{ coin }}">-</td>
             <td>
                 <button onclick="executeTrade('{{ coin }}', 'Binance', 'OKX')">Buy Binance → Sell OKX</button>
@@ -111,23 +196,54 @@
     </tbody>
 </table>
 
+<!-- Trade Status -->
+<div id="trade-status">
+    <h2>Trade Status</h2>
+    <p id="last-trade">No trades executed yet.</p>
+</div>
+
 <!-- Recent Trades -->
 {% if trade_history %}
-<h2>Recent Trades</h2>
+<h2>Trade History</h2>
 <table class="trade-history-table">
-    <tr><th>Time</th><th>Coin</th><th>Buy Price</th><th>Sell Price</th><th>Quantity</th><th>Profit</th></tr>
-    {% for trade in trade_history[:5] %}
-    <tr>
-        <td>{{ trade.time }}</td>
-        <td>{{ trade.symbol }}</td>
-        <td>${{ "%.2f"|format(trade.buy_price) }}</td>
-        <td>${{ "%.2f"|format(trade.sell_price) }}</td>
-        <td>{{ trade.quantity }}</td>
-        <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
-            ${{ "%.2f"|format(trade.profit) }}
-        </td>
-    </tr>
-    {% endfor %}
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Coin</th>
+            <th>Buy Exchange</th>
+            <th>Sell Exchange</th>
+            <th>Buy Trade ID</th>
+            <th>Sell Trade ID</th>
+            <th>Buy Price</th>
+            <th>Sell Price</th>
+            <th>Quantity</th>
+            <th>Buy Fee</th>
+            <th>Sell Fee</th>
+            <th>Profit</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for trade in trade_history[:10] %}
+        <tr>
+            <td>{{ trade.time }}</td>
+            <td>{{ trade.symbol }}</td>
+            <td>{{ trade.buy_exchange }}</td>
+            <td>{{ trade.sell_exchange }}</td>
+            <td>{{ trade.buy_trade_id }}</td>
+            <td>{{ trade.sell_trade_id }}</td>
+            <td>${{ "%.2f"|format(trade.buy_price) }}</td>
+            <td>${{ "%.2f"|format(trade.sell_price) }}</td>
+            <td>{{ "%.4f"|format(trade.quantity) }}</td>
+            <td>${{ "%.4f"|format(trade.buy_fee) }}</td>
+            <td>${{ "%.4f"|format(trade.sell_fee) }}</td>
+            <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
+                ${{ "%.2f"|format(trade.profit) }}
+            </td>
+            <td>{{ trade.status }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
 </table>
 {% endif %}
 
@@ -174,7 +290,14 @@
     });
 
     function executeTrade(symbol, buyExchange, sellExchange) {
-        fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
+        const lastTradeEl = document.getElementById('last-trade');
+        lastTradeEl.textContent = `Executing trade: ${symbol} (Buy ${buyExchange}, Sell ${sellExchange})...`;
+
+        fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`, {
+            headers: {
+                'X-API-KEY': 'your-app-api-key' // Replace with secure method to load key
+            }
+        })
             .then(async (response) => {
                 if (!response.ok) {
                     const errText = await response.text();
@@ -183,14 +306,18 @@
                 return response.json();
             })
             .then(data => {
+                lastTradeEl.textContent = data.message;
+                lastTradeEl.className = data.success ? 'trade-success' : 'trade-failed';
                 alert(`✅ Trade executed:\n\n${data.message}`);
+                location.reload(); // Refresh to update trade history and balances
             })
             .catch(error => {
                 console.error("Frontend JS error:", error);
-                alert("🚨 Trade failed.\nCheck browser console.");
+                lastTradeEl.textContent = `Trade failed: ${error.message}`;
+                lastTradeEl.className = 'trade-failed';
+                alert(`🚨 Trade failed:\n${error.message}`);
             });
     }
 </script>
-
 </body>
 </html>
