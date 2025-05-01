@@ -242,26 +242,40 @@
         updatePrices();
         setInterval(updatePrices, 1000);
 
-        function executeTrade(symbol, buyExchange, sellExchange) {
-            fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.success === false) {
-                        alert(`🚨 Trade failed:\n${data.message || JSON.stringify(data)}`);
-                    } else {
-                        alert(`✅ Trade executed successfully:\n${data.message}`);
-                    }
-                })
-                .catch(error => {
-                    console.error("Frontend error:", error);
-                    alert("🚨 Network or API error during trade execution.");
-                });
-        }
+    function executeTrade(symbol, buyExchange, sellExchange) {
+        const url = `/execute_trade/${symbol}/${buyExchange}/${sellExchange}`;
+        
+        // Show loading message
+        alert("Sending trade request for " + symbol + "...");
+
+        fetch(url)
+            .then(async (response) => {
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP error! Status: ${response.status}, Body: ${errText}`);
+                }
+
+                try {
+                    return await response.json();  // Try to parse JSON
+                } catch (jsonError) {
+                    throw new Error("Invalid JSON response from server");
+                }
+            })
+            .then(data => {
+                console.log("Trade response:", data);
+
+                if (data.success === false) {
+                    alert(`⚠️ Trade failed:\n\n${data.message || "Unknown error"}`);
+                } else {
+                    alert(`✅ Success: ${data.message || "Trade executed successfully"}`);
+                }
+            })
+            .catch(error => {
+                console.error("Frontend error:", error);
+                alert(`🚨 Network or API error:\n${error.message}`);
+            });
+    }
+
     });
 </script>
 

@@ -227,10 +227,26 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
 
     name_map = SUPPORTED_SYMBOLS.get(symbol.upper())
     if not name_map:
-        return jsonify({"success": False, "error": f"Symbol {symbol.upper()} not supported."}), 400
+        return jsonify({"success": False, "message": f"{symbol} is not supported"}), 400
 
-    binance_symbol = name_map['binance']
-    okx_symbol = name_map['okx']
+    # Simulate dummy success/failure
+    success = True
+    message = f"Executed trade: Buy {symbol} on {buy_exchange}, sell on {sell_exchange}"
+
+    # Add to history
+    trade_history.insert(0, {
+        "time": time.strftime('%Y-%m-%d %H:%M:%S'),
+        "symbol": symbol,
+        "buy_exchange": buy_exchange,
+        "sell_exchange": sell_exchange,
+        "success": success,
+        "message": message
+    })
+
+    return jsonify({
+        "success": success,
+        "message": message
+    })
 
     # Get price for quantity
     binance_prices = fetch_binance_prices()
