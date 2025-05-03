@@ -6,7 +6,7 @@ import time
 from retry import retry
 from apscheduler.schedulers.background import BackgroundScheduler
 from ratelimit import limits, sleep_and_retry
-from python_dotenv import load_dotenv
+from dotenv import load_dotenv
 import os
 import logging
 # Configure logging
