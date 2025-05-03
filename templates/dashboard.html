@@ -5,11 +5,10 @@
     <title>Crypto Arbitrage Dashboard</title>
     <style>
         body {
-            font-family: Arial;
+            font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
             background-color: #f4f6f9;
-            color: #333;
         }
 
         h1 {
@@ -48,12 +47,13 @@
         }
 
         button {
+            margin: 5px;
             padding: 8px 12px;
             background-color: #2c3e50;
             color: white;
             border: none;
             cursor: pointer;
-            margin: 5px;
+            border-radius: 4px;
         }
 
         button:hover {
@@ -65,6 +65,21 @@
             margin-top: 30px;
             font-size: 12px;
             color: #666;
+        }
+
+        .trade-history-table {
+            width: 90%;
+            margin: 30px auto;
+            border-collapse: collapse;
+            background-color: #fff;
+        }
+
+        .trade-success {
+            color: green;
+        }
+
+        .trade-failed {
+            color: red;
         }
     </style>
 </head>
@@ -98,16 +113,16 @@
     </tbody>
 </table>
 
-<!-- Recent Trade History -->
+<!-- Recent Trades -->
 {% if trade_history %}
 <h2 style="text-align:center;">Recent Trades</h2>
-<table style="width:90%; margin:auto;">
+<table class="trade-history-table">
     <tr style="background:#2c3e50; color:white;">
         <th>Time</th>
         <th>Coin</th>
         <th>Buy On</th>
         <th>Sell On</th>
-        <th>Profit</th>
+        <th>Profit ($)</th>
     </tr>
     {% for trade in trade_history[:5] %}
     <tr class="{% if trade.profit > 0 %}highlight{% endif %}">
@@ -115,69 +130,72 @@
         <td>{{ trade.symbol }}</td>
         <td>{{ trade.buy_exchange }}</td>
         <td>{{ trade.sell_exchange }}</td>
-        <td>${{ "%.2f"|format(trade.profit) if trade.profit else "-" }}</td>
+        <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
+            ${{ "%.2f"|format(trade.profit) if trade.profit else "N/A" }}
+        </td>
     </tr>
     {% endfor %}
 </table>
+{% else %}
+<p style="text-align:center; margin-top:30px;">No trades executed yet.</p>
 {% endif %}
 
 <footer>Prices refresh every second...</footer>
 
 <script>
-    // Ensure JS runs after DOM loads
-    document.addEventListener("DOMContentLoaded", () => {
-        async function updatePrices() {
-            try {
-                const res = await fetch("/update_prices");
-                if (!res.ok) throw new Error("Failed to update prices");
+document.addEventListener("DOMContentLoaded", () => {
+    async function updatePrices() {
+        try {
+            const res = await fetch("/update_prices");
+            if (!res.ok) throw new Error("Failed to update prices");
 
-                const data = await res.json();
+            const data = await res.json();
 
-                Object.entries(data).forEach(([coin, prices]) => {
-                    const row = document.querySelector(`tr[data-symbol="${coin}"]`);
-                    if (!row) return;
+            Object.entries(data).forEach(([coin, prices]) => {
+                const row = document.querySelector(`tr[data-symbol="${coin}"]`);
+                if (!row) return;
 
-                    const binanceCell = row.querySelector('[data-exchange="Binance"]');
-                    const okxCell = row.querySelector('[data-exchange="OKX"]');
-                    const diffCell = document.getElementById(`diff-${coin}`);
+                const binanceCell = row.querySelector('[data-exchange="Binance"]');
+                const okxCell = row.querySelector('[data-exchange="OKX"]');
+                const diffCell = document.getElementById(`diff-${coin}`);
 
-                    if (prices.Binance !== undefined) binanceCell.textContent = `$${prices.Binance.toFixed(2)}`;
-                    if (prices.OKX !== undefined) okxCell.textContent = `$${prices.OKX.toFixed(2)}`;
+                if (prices.Binance !== undefined) binanceCell.textContent = `$${prices.Binance.toFixed(2)}`;
+                if (prices.OKX !== undefined) okxCell.textContent = `$${prices.OKX.toFixed(2)}`;
 
-                    if (prices.Binance && prices.OKX) {
-                        const diff = Math.abs(prices.Binance - prices.OKX);
-                        diffCell.innerHTML = `<strong>${diff.toFixed(2)}</strong>`;
-                        row.classList.toggle("highlight", diff > 0.5);
-                    } else {
-                        diffCell.textContent = "N/A";
-                    }
-                });
-            } catch (err) {
-                console.error("Price update failed:", err);
-            }
-        }
-
-        setInterval(updatePrices, 1000);
-        updatePrices();
-    });
-
-    // ✅ Fixed executeTrade function
-    function executeTrade(symbol, buyExchange, sellExchange) {
-        fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error("Network response was not ok");
+                if (prices.Binance && prices.OKX) {
+                    const diff = Math.abs(prices.Binance - prices.OKX);
+                    diffCell.innerHTML = `<strong>${diff.toFixed(2)}</strong>`;
+                    row.classList.toggle("highlight", diff > 0.5);
+                } else {
+                    diffCell.textContent = "N/A";
                 }
-                return response.json();
-            })
-            .then(data => {
-                alert(data.message || JSON.stringify(data));
-            })
-            .catch(error => {
-                console.error("Frontend error:", error);
-                alert("🚨 Network error:\nCheck browser console.");
             });
+        } catch (err) {
+            console.error("Price update failed:", err);
+        }
     }
+
+    setInterval(updatePrices, 1000);
+    updatePrices();
+});
+
+function executeTrade(symbol, buyExchange, sellExchange) {
+    fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
+        .then(async (response) => {
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`HTTP error! Status: ${response.status}, Body: ${errText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            alert(data.message || JSON.stringify(data));
+        })
+        .catch(error => {
+            console.error("Frontend JS error:", error);
+            alert("🚨 Network or API error:\nCheck browser console.");
+        });
+}
 </script>
 
 </body>
