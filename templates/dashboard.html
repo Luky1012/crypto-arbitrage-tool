@@ -9,6 +9,7 @@
             margin: 0;
             padding: 0;
             background-color: #f4f6f9;
+            color: #333;
         }
 
         h1 {
@@ -49,10 +50,10 @@
         button {
             margin: 5px;
             padding: 8px 12px;
-            cursor: pointer;
             background-color: #2c3e50;
             color: white;
             border: none;
+            cursor: pointer;
             border-radius: 4px;
         }
 
@@ -111,14 +112,14 @@
             {% endfor %}
         </table>
         {% else %}
-        <p style="color:red;">{{ binance_balance.error }}</p>
+        <p style="color:red;">{{ binance_balance.error | default("No balance data") }}</p>
         {% endif %}
     </div>
 
     <!-- OKX Balances -->
     <div>
         <h2>OKX Balances</h2>
-        {% if okx_balance.success %}
+        {% if okx_balance.success and okx_balance.data %}
         <table class="balance-table">
             <tr><th>Currency</th><th>Available</th><th>Frozen</th></tr>
             {% set details = okx_balance.data.get('data', [{}])[0].get('details', []) %}
@@ -131,7 +132,7 @@
             {% endfor %}
         </table>
         {% else %}
-        <p style="color:red;">{{ okx_balance.error }}</p>
+        <p style="color:red;">{{ okx_balance.error | default("No balance data") }}</p>
         {% endif %}
     </div>
 </div>
@@ -180,103 +181,63 @@
     </tr>
     {% endfor %}
 </table>
+{% else %}
+<p style="text-align:center; margin-top:30px;">No trades executed yet.</p>
 {% endif %}
 
 <footer>Prices refresh every second...</footer>
 
 <script>
-    document.addEventListener("DOMContentLoaded", () => {
-        async function updatePrices() {
-            try {
-                const res = await fetch("/update_prices");
-                const data = await res.json();
-
-                Object.entries(data).forEach(([coin, prices]) => {
-                    const row = document.querySelector(`tr[data-symbol="${coin}"]`);
-                    if (!row) return;
-
-                    const binanceCell = row.querySelector('[data-exchange="Binance"]');
-                    const okxCell = row.querySelector('[data-exchange="OKX"]');
-                    const diffCell = document.getElementById(`diff-${coin}`);
-
-                    if (prices.Binance !== undefined) binanceCell.textContent = `$${prices.Binance.toFixed(2)}`;
-                    if (prices.OKX !== undefined) okxCell.textContent = `$${prices.OKX.toFixed(2)}`;
-
-                    if (prices.Binance && prices.OKX) {
-                        const diff = Math.abs(prices.Binance - prices.OKX);
-                        diffCell.innerHTML = `<strong>${diff.toFixed(2)}</strong>`;
-                        row.classList.toggle("highlight", diff > 0.5);
-                    } else {
-                        diffCell.textContent = "N/A";
-                    }
-                });
-            } catch (err) {
-                console.error("Price update failed:", err);
-            }
-        }
-
-        setInterval(updatePrices, 1000);
-        updatePrices();
-    });
-
-    // Fetch balances every 10s
-    async function updateBalances() {
+document.addEventListener("DOMContentLoaded", () => {
+    async function updatePrices() {
         try {
-            const res = await fetch("/get_balance");
+            const res = await fetch("/update_prices");
             const data = await res.json();
 
-            const binanceData = data.binance.data || [];
-            const okxData = data.okx.data ? data.okx.data[0]?.details || [] : [];
+            Object.entries(data).forEach(([coin, prices]) => {
+                const row = document.querySelector(`tr[data-symbol="${coin}"]`);
+                if (!row) return;
 
-            const binanceBalanceContainer = document.getElementById("binance-balances");
-            const okxBalanceContainer = document.getElementById("okx-balances");
+                const binanceCell = row.querySelector('[data-exchange="Binance"]');
+                const okxCell = row.querySelector('[data-exchange="OKX"]');
+                const diffCell = document.getElementById(`diff-${coin}`);
 
-            binanceBalanceContainer.innerHTML = "";
-            okxBalanceContainer.innerHTML = "";
+                if (prices.Binance !== undefined) binanceCell.textContent = `$${prices.Binance.toFixed(2)}`;
+                if (prices.OKX !== undefined) okxCell.textContent = `$${prices.OKX.toFixed(2)}`;
 
-            binanceData.forEach(asset => {
-                binanceBalanceContainer.innerHTML += `
-                    <tr>
-                        <td>${asset.asset}</td>
-                        <td>{{ "%.4f"|format(asset.free|float) }}</td>
-                        <td>{{ "%.4f"|format(asset.locked|float) }}</td>
-                    </tr>
-                `;
+                if (prices.Binance && prices.OKX) {
+                    const diff = Math.abs(prices.Binance - prices.OKX);
+                    diffCell.innerHTML = `<strong>${diff.toFixed(2)}</strong>`;
+                    row.classList.toggle("highlight", diff > 0.5);
+                } else {
+                    diffCell.textContent = "N/A";
+                }
             });
-
-            okxData.forEach(currency => {
-                okxBalanceContainer.innerHTML += `
-                    <tr>
-                        <td>${currency.ccy}</td>
-                        <td>{{ "%.4f"|format(currency.available|float) }}</td>
-                        <td>{{ "%.4f"|format(currency.frozen|float) }}</td>
-                    </tr>
-                `;
-            });
-
         } catch (err) {
-            console.error("Failed to update balances:", err);
+            console.error("Price update failed:", err);
         }
     }
 
-    setInterval(updateBalances, 10000);
-    updateBalances();
+    setInterval(updatePrices, 1000);
+    updatePrices();
+});
 
-    // Trade execution
-    function executeTrade(symbol, buyExchange, sellExchange) {
-        fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
-            .then(response => {
-                if (!response.ok) throw new Error("Network error");
-                return response.json();
-            })
-            .then(data => {
-                alert(data.message || JSON.stringify(data));
-            })
-            .catch(error => {
-                console.error("Frontend error:", error);
-                alert("🚨 Trade failed. Check console.");
-            });
-    }
+function executeTrade(symbol, buyExchange, sellExchange) {
+    fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Network error");
+            }
+            return response.json();
+        })
+        .then(data => {
+            alert(data.message || JSON.stringify(data));
+        })
+        .catch(error => {
+            console.error("Frontend JS error:", error);
+            alert("🚨 Trade failed:\nCheck browser console.");
+        });
+}
 </script>
 
 </body>

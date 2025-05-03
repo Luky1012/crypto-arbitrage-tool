@@ -15,7 +15,7 @@ from ratelimit import limits, sleep_and_retry
 app = Flask(__name__)
 load_dotenv()
 
-# Set up logging
+# Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ OKX_SECRET_KEY = os.getenv("OKX_SECRET_KEY")
 OKX_PASSPHRASE = os.getenv("OKX_PASSPHRASE")
 
 if not all([BINANCE_API_KEY, BINANCE_SECRET_KEY, OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE]):
-    raise ValueError("One or more API keys are missing.")
+    raise ValueError("One or more API keys are missing!")
 
 # Supported symbols
 SUPPORTED_SYMBOLS = {
@@ -57,7 +57,7 @@ def get_okx_server_time():
     try:
         response = requests.get(url)
         data = response.json()
-        return int(data['data'][0]['ts'])
+        return int(float(data['data'][0]['ts']))
     except Exception as e:
         logger.error(f"Error fetching OKX server time: {e}")
         return int(time.time())
@@ -127,7 +127,7 @@ def fetch_binance_balance():
         balances = [
             {"asset": asset["asset"], "free": asset["free"], "locked": asset["locked"]}
             for asset in data.get("balances", [])
-            if float(asset["free"]) > 0 or float(asset["locked"]) > 0
+            if float(asset.get("free", 0)) > 0 or float(asset.get("locked", 0)) > 0
         ]
         return {"success": True, "data": balances}
     except Exception as e:
@@ -153,13 +153,13 @@ def fetch_okx_balance():
         response = requests.get(
             f"{OKX_API_URL}{request_path}",
             headers=headers,
-            params=body
+            params={"instType": "SPOT"}
         )
 
         data = response.json()
         return {"success": True, "data": data}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "data": []}
 
 # Quantity rounding
 def get_binance_lot_size(symbol):
