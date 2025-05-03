@@ -19,16 +19,46 @@
             color: #2c3e50;
         }
 
+        .balance-section {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin: 20px auto;
+            width: 90%;
+            gap: 20px;
+        }
+
+        .balance-box {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 45%;
+            min-width: 300px;
+        }
+
+        .balance-box h2 {
+            margin-top: 0;
+        }
+
+        .balance-box p {
+            font-size: 1.2rem;
+            margin: 5px 0;
+        }
+
         table {
             width: 90%;
             margin: 20px auto;
             border-collapse: collapse;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
         }
 
         th, td {
-            padding: 12px 15px;
+            padding: 12px;
             text-align: center;
             border-bottom: 1px solid #ddd;
         }
@@ -68,18 +98,12 @@
             color: #666;
         }
 
-        .balance-table {
-            width: 90%;
-            margin: 20px auto;
-            border-collapse: collapse;
-            background-color: #fff;
-        }
-
         .trade-history-table {
             width: 90%;
-            margin: 20px auto;
+            margin: 30px auto;
             border-collapse: collapse;
             background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
 
         .trade-success {
@@ -95,44 +119,27 @@
 
 <h1>Crypto Arbitrage Dashboard</h1>
 
-<!-- Balances -->
-<div style="display:flex; justify-content:space-around; flex-wrap:wrap;">
-    <!-- Binance Balances -->
-    <div>
-        <h2>Binance Balances</h2>
+<!-- Usable Balance -->
+<div class="balance-section">
+    <!-- Binance USDT Balance -->
+    <div class="balance-box">
+        <h2>Binance USDT</h2>
         {% if binance_balance.success %}
-        <table class="balance-table">
-            <tr><th>Asset</th><th>Free</th><th>Locked</th></tr>
-            {% for asset in binance_balance.data %}
-            <tr>
-                <td>{{ asset.asset }}</td>
-                <td>{{ "%.4f"|format(asset.free|float) }}</td>
-                <td>{{ "%.4f"|format(asset.locked|float) }}</td>
-            </tr>
-            {% endfor %}
-        </table>
+        <p>Available: ${{ "%.2f"|format(binance_balance.free) }}</p>
+        <p>Total: ${{ "%.2f"|format(binance_balance.total) }}</p>
         {% else %}
-        <p style="color:red;">{{ binance_balance.error | default("No balance data") }}</p>
+        <p style="color:red;">{{ binance_balance.error }}</p>
         {% endif %}
     </div>
 
-    <!-- OKX Balances -->
-    <div>
-        <h2>OKX Balances</h2>
-        {% if okx_balance.success and okx_balance.data %}
-        <table class="balance-table">
-            <tr><th>Currency</th><th>Available</th><th>Frozen</th></tr>
-            {% set details = okx_balance.data.get('data', [{}])[0].get('details', []) %}
-            {% for currency in details %}
-            <tr>
-                <td>{{ currency.ccy }}</td>
-                <td>{{ "%.4f"|format(currency.available|float) }}</td>
-                <td>{{ "%.4f"|format(currency.frozen|float) }}</td>
-            </tr>
-            {% endfor %}
-        </table>
+    <!-- OKX USDT Balance -->
+    <div class="balance-box">
+        <h2>OKX USDT</h2>
+        {% if okx_balance.success %}
+        <p>Available: ${{ "%.2f"|format(okx_balance.available) }}</p>
+        <p>Total: ${{ "%.2f"|format(okx_balance.total) }}</p>
         {% else %}
-        <p style="color:red;">{{ okx_balance.error | default("No balance data") }}</p>
+        <p style="color:red;">{{ okx_balance.error }}</p>
         {% endif %}
     </div>
 </div>
@@ -222,12 +229,11 @@ document.addEventListener("DOMContentLoaded", () => {
     updatePrices();
 });
 
+// Trade execution feedback
 function executeTrade(symbol, buyExchange, sellExchange) {
     fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
         .then(response => {
-            if (!response.ok) {
-                throw new Error("Network error");
-            }
+            if (!response.ok) throw new Error("Network error");
             return response.json();
         })
         .then(data => {

@@ -57,7 +57,7 @@ def get_okx_server_time():
     try:
         response = requests.get(url)
         data = response.json()
-        return int(float(data['data'][0]['ts']))
+        return int(data['data'][0]['ts'])
     except Exception as e:
         logger.error(f"Error fetching OKX server time: {e}")
         return int(time.time())
@@ -100,47 +100,52 @@ def fetch_okx_prices():
             logger.error(f"Error fetching {symbol_info['okx']} from OKX: {e}")
     return prices
 
-# Fetch balances
+# Fetch usable balance (e.g., USDT)
 @retry(tries=3, delay=1)
-def fetch_binance_balance():
-    timestamp = get_binance_server_time()
-    query_string = f"timestamp={timestamp}"
-    signature = hmac.new(
-        BINANCE_SECRET_KEY.encode('utf-8'),
-        query_string.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
-
-    headers = {"X-MBX-APIKEY": BINANCE_API_KEY}
-    params = {
-        "timestamp": timestamp,
-        "signature": signature
-    }
-
+def fetch_binance_usdt_balance():
     try:
+        timestamp = get_binance_server_time()
+        query_string = f"timestamp={timestamp}"
+        signature = hmac.new(
+            BINANCE_SECRET_KEY.encode('utf-8'),
+            query_string.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+
+        headers = {"X-MBX-APIKEY": BINANCE_API_KEY}
+        params = {
+            "timestamp": timestamp,
+            "signature": signature
+        }
+
         response = requests.get(
             f"{BINANCE_API_URL}/api/v3/account",
             headers=headers,
             params=params
         )
+
         data = response.json()
-        balances = [
-            {"asset": asset["asset"], "free": asset["free"], "locked": asset["locked"]}
-            for asset in data.get("balances", [])
-            if float(asset.get("free", 0)) > 0 or float(asset.get("locked", 0)) > 0
-        ]
-        return {"success": True, "data": balances}
+        for asset in data.get("balances", []):
+            if asset["asset"] == "USDT":
+                return {
+                    "success": True,
+                    "free": float(asset["free"]),
+                    "locked": float(asset["locked"]),
+                    "total": float(asset["free"]) + float(asset["locked"])
+                }
+        return {"success": False, "error": "No USDT balance found"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 @retry(tries=3, delay=1)
-def fetch_okx_balance():
+def fetch_okx_usdt_balance():
     try:
         timestamp = str(get_okx_server_time())
+        method = "GET"
         request_path = "/api/v5/account/balance"
         body = {"instType": "SPOT"}
         body_str = json.dumps(body)
-        signature = sign_okx_request(timestamp, "GET", request_path, body_str)
+        signature = sign_okx_request(timestamp, method, request_path, body_str)
 
         headers = {
             "OK-ACCESS-KEY": OKX_API_KEY,
@@ -153,13 +158,22 @@ def fetch_okx_balance():
         response = requests.get(
             f"{OKX_API_URL}{request_path}",
             headers=headers,
-            params={"instType": "SPOT"}
+            params={"ccy": "USDT"}
         )
 
         data = response.json()
-        return {"success": True, "data": data}
+        for detail in data.get("data", [{}])[0].get("details", []):
+            if detail["ccy"] == "USDT":
+                return {
+                    "success": True,
+                    "available": float(detail["availBal"]),
+                    "frozen": float(detail["frozenBal"]),
+                    "total": float(detail["availBal"]) + float(detail["frozenBal"])
+                }
+        return {"success": False, "error": "No USDT balance found"}
+
     except Exception as e:
-        return {"success": False, "error": str(e), "data": []}
+        return {"success": False, "error": str(e)}
 
 # Quantity rounding
 def get_binance_lot_size(symbol):
@@ -255,9 +269,9 @@ def dashboard():
     binance_prices = fetch_binance_prices()
     okx_prices = fetch_okx_prices()
 
-    # Fetch balances
-    binance_balance = fetch_binance_balance()
-    okx_balance = fetch_okx_balance()
+    # Fetch only USDT balance
+    binance_balance = fetch_binance_usdt_balance()
+    okx_balance = fetch_okx_usdt_balance()
 
     crypto_data = {}
     for symbol, names in SUPPORTED_SYMBOLS.items():
@@ -300,12 +314,12 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
     okx_symbol = name_map['okx']
 
     price_data = fetch_binance_prices()
-    price = price_data.get(binance_symbol, 0.01)
+    price = price_data.get(name_map['binance'], 0.01)
     raw_quantity = max(0.01, 10 / price) if price > 0 else 0.01
 
     step_size, precision = get_binance_lot_size(binance_symbol)
     if not step_size:
-        return jsonify({"success": False, "message": "LOT_SIZE not found"}), 500
+        return jsonify({"success": False, "message": "LOT_SIZE filter not found"}), 500
 
     quantity = round_quantity(raw_quantity, step_size, precision)
 
@@ -331,11 +345,8 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
 
         return jsonify({
             "success": True,
-            "message": f"✅ Buy {symbol} on {buy_exchange}, Sell on {sell_exchange}\nProfit: ${profit:.2f}",
-            "details": {
-                "buy": buy_response,
-                "sell": sell_response
-            }
+            "message": f"✅ Buy {symbol} on Binance, Sell on OKX\nProfit: ${profit:.2f}",
+            "trade": trade_entry
         })
 
     elif buy_exchange == "OKX" and sell_exchange == "Binance":
@@ -360,11 +371,8 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
 
         return jsonify({
             "success": True,
-            "message": f"✅ Buy {symbol} on {buy_exchange}, Sell on {sell_exchange}\nProfit: ${profit:.2f}",
-            "details": {
-                "buy": buy_response,
-                "sell": sell_response
-            }
+            "message": f"✅ Buy {symbol} on OKX, Sell on Binance\nProfit: ${profit:.2f}",
+            "trade": trade_entry
         })
     else:
         return jsonify({"success": False, "error": "Invalid exchange pair"})
