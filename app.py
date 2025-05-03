@@ -15,7 +15,7 @@ from ratelimit import limits, sleep_and_retry
 app = Flask(__name__)
 load_dotenv()
 
-# Logging setup
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ OKX_SECRET_KEY = os.getenv("OKX_SECRET_KEY")
 OKX_PASSPHRASE = os.getenv("OKX_PASSPHRASE")
 
 if not all([BINANCE_API_KEY, BINANCE_SECRET_KEY, OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE]):
-    raise ValueError("One or more API keys are missing!")
+    raise ValueError("One or more API keys are missing.")
 
 # Supported symbols
 SUPPORTED_SYMBOLS = {
@@ -57,7 +57,7 @@ def get_okx_server_time():
     try:
         response = requests.get(url)
         data = response.json()
-        return int(float(data['data'][0]['ts']))
+        return int(data['data'][0]['ts'])
     except Exception as e:
         logger.error(f"Error fetching OKX server time: {e}")
         return int(time.time())
@@ -103,7 +103,6 @@ def fetch_okx_prices():
 # Fetch balances
 @retry(tries=3, delay=1)
 def fetch_binance_balance():
-    """Fetch account balance from Binance"""
     timestamp = get_binance_server_time()
     query_string = f"timestamp={timestamp}"
     signature = hmac.new(
@@ -136,31 +135,29 @@ def fetch_binance_balance():
 
 @retry(tries=3, delay=1)
 def fetch_okx_balance():
-    """Fetch account balance from OKX"""
-    timestamp = str(get_okx_server_time())
-    method = "GET"
-    request_path = "/api/v5/account/balance"
-    body = {"ccy": "USDT"}
-    body_str = json.dumps(body)
-
-    signature = sign_okx_request(timestamp, method, request_path, body_str)
-
-    headers = {
-        "OK-ACCESS-KEY": OKX_API_KEY,
-        "OK-ACCESS-SIGN": signature,
-        "OK-ACCESS-TIMESTAMP": timestamp,
-        "OK-ACCESS-PASSPHRASE": OKX_PASSPHRASE,
-        "Content-Type": "application/json"
-    }
-
     try:
+        timestamp = str(get_okx_server_time())
+        request_path = "/api/v5/account/balance"
+        body = {"instType": "SPOT"}
+        body_str = json.dumps(body)
+        signature = sign_okx_request(timestamp, "GET", request_path, body_str)
+
+        headers = {
+            "OK-ACCESS-KEY": OKX_API_KEY,
+            "OK-ACCESS-SIGN": signature,
+            "OK-ACCESS-TIMESTAMP": timestamp,
+            "OK-ACCESS-PASSPHRASE": OKX_PASSPHRASE,
+            "Content-Type": "application/json"
+        }
+
         response = requests.get(
             f"{OKX_API_URL}{request_path}",
             headers=headers,
-            params={"instType": "SPOT"}
+            params=body
         )
+
         data = response.json()
-        return {"success": True, "data": data.get("data", [])}
+        return {"success": True, "data": data}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -171,10 +168,10 @@ def get_binance_lot_size(symbol):
             f"{BINANCE_API_URL}/api/v3/exchangeInfo",
             params={"symbol": symbol}
         )
-        filters = res.json()['symbols'][0]['filters']
-        for f in filters:
-            if f['filterType'] == 'LOT_SIZE':
-                step_size = float(f['stepSize'])
+        filters = res.json()["symbols"][0]["filters"]
+        for filter in filters:
+            if filter["filterType"] == "LOT_SIZE":
+                step_size = float(filter["stepSize"])
                 precision = len(str(step_size).split('.')[1]) if '.' in str(step_size) else 0
                 return step_size, precision
         return None, None
@@ -215,7 +212,7 @@ def execute_binance_trade(symbol, side, quantity):
 
         return response.json()
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"error": str(e)}
 
 def execute_okx_trade(symbol, side, size):
     try:
@@ -248,7 +245,7 @@ def execute_okx_trade(symbol, side, size):
 
         return response.json()
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"error": str(e)}
 
 # Global trade history list
 trade_history = []
@@ -259,8 +256,8 @@ def dashboard():
     okx_prices = fetch_okx_prices()
 
     # Fetch balances
-    binance_balances = fetch_binance_balance()
-    okx_balances = fetch_okx_balance()
+    binance_balance = fetch_binance_balance()
+    okx_balance = fetch_okx_balance()
 
     crypto_data = {}
     for symbol, names in SUPPORTED_SYMBOLS.items():
@@ -272,8 +269,8 @@ def dashboard():
     return render_template(
         'dashboard.html',
         crypto_data=crypto_data,
-        binance_balance=binance_balances,
-        okx_balance=okx_balances,
+        binance_balance=binance_balance,
+        okx_balance=okx_balance,
         trade_history=trade_history
     )
 
@@ -291,27 +288,19 @@ def update_prices():
 
     return jsonify(combined)
 
-@app.route('/get_balance')
-def get_balance():
-    binance_balance = fetch_binance_balance()
-    okx_balance = fetch_okx_balance()
-    return jsonify({
-        "binance": binance_balance,
-        "okx": okx_balance
-    })
-
 @app.route('/execute_trade/<symbol>/<buy_exchange>/<sell_exchange>')
 def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
     global trade_history
 
     name_map = SUPPORTED_SYMBOLS.get(symbol.upper())
     if not name_map:
-        return jsonify({"success": False, "message": f"{symbol} is not supported"}), 400
+        return jsonify({"success": False, "message": f"Invalid symbol: {symbol}"}), 400
 
     binance_symbol = name_map['binance']
     okx_symbol = name_map['okx']
 
-    price = fetch_binance_prices().get(binance_symbol, 0)
+    price_data = fetch_binance_prices()
+    price = price_data.get(binance_symbol, 0.01)
     raw_quantity = max(0.01, 10 / price) if price > 0 else 0.01
 
     step_size, precision = get_binance_lot_size(binance_symbol)

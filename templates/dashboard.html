@@ -9,7 +9,6 @@
             margin: 0;
             padding: 0;
             background-color: #f4f6f9;
-            color: #333;
         }
 
         h1 {
@@ -47,29 +46,13 @@
             font-weight: bold;
         }
 
-        .balance-table {
-            width: 90%;
-            margin: 20px auto;
-            border-collapse: collapse;
-            background-color: #fff;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-
-        .trade-history-table {
-            width: 90%;
-            margin: 20px auto;
-            border-collapse: collapse;
-            background-color: #fff;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-
         button {
             margin: 5px;
             padding: 8px 12px;
+            cursor: pointer;
             background-color: #2c3e50;
             color: white;
             border: none;
-            cursor: pointer;
             border-radius: 4px;
         }
 
@@ -83,6 +66,28 @@
             font-size: 12px;
             color: #666;
         }
+
+        .balance-table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background-color: #fff;
+        }
+
+        .trade-history-table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background-color: #fff;
+        }
+
+        .trade-success {
+            color: green;
+        }
+
+        .trade-failed {
+            color: red;
+        }
     </style>
 </head>
 <body>
@@ -91,7 +96,7 @@
 
 <!-- Balances -->
 <div style="display:flex; justify-content:space-around; flex-wrap:wrap;">
-    <!-- Binance Balance -->
+    <!-- Binance Balances -->
     <div>
         <h2>Binance Balances</h2>
         {% if binance_balance.success %}
@@ -110,14 +115,14 @@
         {% endif %}
     </div>
 
-    <!-- OKX Balance -->
+    <!-- OKX Balances -->
     <div>
         <h2>OKX Balances</h2>
         {% if okx_balance.success %}
         <table class="balance-table">
             <tr><th>Currency</th><th>Available</th><th>Frozen</th></tr>
-            {% set okx_data = okx_balance.data[0] %}
-            {% for currency in okx_data.details %}
+            {% set details = okx_balance.data.get('data', [{}])[0].get('details', []) %}
+            {% for currency in details %}
             <tr>
                 <td>{{ currency.ccy }}</td>
                 <td>{{ "%.4f"|format(currency.available|float) }}</td>
@@ -162,13 +167,7 @@
 {% if trade_history %}
 <h2 style="text-align:center;">Recent Trades</h2>
 <table class="trade-history-table">
-    <tr>
-        <th>Time</th>
-        <th>Coin</th>
-        <th>Buy On</th>
-        <th>Sell On</th>
-        <th>Profit ($)</th>
-    </tr>
+    <tr><th>Time</th><th>Coin</th><th>Buy On</th><th>Sell On</th><th>Profit ($)</th></tr>
     {% for trade in trade_history[:5] %}
     <tr class="{% if trade.profit > 0 %}highlight{% endif %}">
         <td>{{ trade.time }}</td>
@@ -176,7 +175,7 @@
         <td>{{ trade.buy_exchange }}</td>
         <td>{{ trade.sell_exchange }}</td>
         <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
-            ${{ "%.2f"|format(trade.profit) }}
+            ${{ "%.2f"|format(trade.profit) if trade.profit else "N/A" }}
         </td>
     </tr>
     {% endfor %}
@@ -227,7 +226,7 @@
             const data = await res.json();
 
             const binanceData = data.binance.data || [];
-            const okxData = data.okx.data ? data.okx.data[0].details : [];
+            const okxData = data.okx.data ? data.okx.data[0]?.details || [] : [];
 
             const binanceBalanceContainer = document.getElementById("binance-balances");
             const okxBalanceContainer = document.getElementById("okx-balances");
@@ -239,8 +238,8 @@
                 binanceBalanceContainer.innerHTML += `
                     <tr>
                         <td>${asset.asset}</td>
-                        <td>${parseFloat(asset.free).toFixed(4)}</td>
-                        <td>${parseFloat(asset.locked).toFixed(4)}</td>
+                        <td>{{ "%.4f"|format(asset.free|float) }}</td>
+                        <td>{{ "%.4f"|format(asset.locked|float) }}</td>
                     </tr>
                 `;
             });
@@ -249,14 +248,14 @@
                 okxBalanceContainer.innerHTML += `
                     <tr>
                         <td>${currency.ccy}</td>
-                        <td>${parseFloat(currency.available).toFixed(4)}</td>
-                        <td>${parseFloat(currency.frozen).toFixed(4)}</td>
+                        <td>{{ "%.4f"|format(currency.available|float) }}</td>
+                        <td>{{ "%.4f"|format(currency.frozen|float) }}</td>
                     </tr>
                 `;
             });
 
         } catch (err) {
-            console.error("Failed to fetch balances:", err);
+            console.error("Failed to update balances:", err);
         }
     }
 
@@ -267,9 +266,7 @@
     function executeTrade(symbol, buyExchange, sellExchange) {
         fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
             .then(response => {
-                if (!response.ok) {
-                    throw new Error("Network error");
-                }
+                if (!response.ok) throw new Error("Network error");
                 return response.json();
             })
             .then(data => {
