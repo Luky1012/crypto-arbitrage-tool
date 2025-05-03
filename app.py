@@ -1,15 +1,18 @@
 from flask import Flask, render_template, jsonify
-import requests  
+import requests
 import hmac
 import hashlib
 import time
-import json
-import os
-from dotenv import load_dotenv
 from retry import retry
 from apscheduler.schedulers.background import BackgroundScheduler
 from ratelimit import limits, sleep_and_retry
-
+from python_dotenv import load_dotenv
+import os
+import logging
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+import json
 # Initialize Flask app
 app = Flask(__name__)
 
