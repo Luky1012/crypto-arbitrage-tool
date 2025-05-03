@@ -5,11 +5,10 @@
     <title>Crypto Arbitrage Dashboard</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Arial;
             margin: 0;
             padding: 0;
             background-color: #f4f6f9;
-            color: #333;
         }
 
         h1 {
@@ -38,7 +37,6 @@
         th {
             background-color: #2c3e50;
             color: #fff;
-            font-weight: bold;
         }
 
         tr:hover {
@@ -46,7 +44,7 @@
         }
 
         .highlight {
-            background-color: #ffeb3b; /* Yellow highlight */
+            background-color: #ffeb3b;
             font-weight: bold;
         }
 
@@ -54,21 +52,22 @@
             table, thead, tbody, th, td, tr {
                 display: block;
             }
-            thead tr {
+
+            thead {
                 display: none;
             }
-            td {
-                text-align: right;
-                padding-left: 50%;
-                position: relative;
-            }
+
             td::before {
                 content: attr(data-label);
                 position: absolute;
                 left: 10px;
                 font-weight: bold;
-                text-transform: uppercase;
-                color: #2c3e50;
+            }
+
+            td {
+                text-align: right;
+                padding-left: 50%;
+                position: relative;
             }
         }
 
@@ -76,7 +75,7 @@
             text-align: center;
             font-size: 12px;
             color: #666;
-            margin-top: 20px;
+            margin-top: 30px;
         }
 
         .loader {
@@ -97,7 +96,7 @@
             100% { transform: rotate(360deg); }
         }
 
-        body.loaded .loader {
+        .loaded .loader {
             display: none;
         }
 
@@ -106,9 +105,6 @@
             margin: 30px auto;
             border-collapse: collapse;
             background-color: #fff;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            border-radius: 8px;
-            overflow: hidden;
         }
 
         .trade-success {
@@ -140,8 +136,8 @@
         {% for coin, prices in crypto_data.items() %}
         <tr data-symbol="{{ coin }}">
             <td>{{ coin }}</td>
-            <td data-exchange="Binance">${{ "%.2f"|format(prices.Binance) }}</td>
-            <td data-exchange="OKX">${{ "%.2f"|format(prices.OKX) }}</td>
+            <td data-exchange="Binance">${{ "%.2f"|format(prices.Binance) if prices.Binance else "N/A" }}</td>
+            <td data-exchange="OKX">${{ "%.2f"|format(prices.OKX) if prices.OKX else "N/A" }}</td>
             <td id="diff-{{ coin }}">{{ "%.2f"|format(prices.Binance - prices.OKX) if prices.Binance and prices.OKX else "N/A" }}</td>
             <td>
                 <button onclick="executeTrade('{{ coin }}', 'Binance', 'OKX')">Buy Binance → Sell OKX</button>
@@ -154,35 +150,29 @@
 
 <!-- Recent Trade History -->
 {% if trade_history %}
-<h2>Recent Trades</h2>
+<h2 style="text-align:center;">Recent Trades</h2>
 <table class="trade-history-table">
-    <thead>
-        <tr>
-            <th>Time</th>
-            <th>Coin</th>
-            <th>Buy</th>
-            <th>Sell</th>
-            <th>Status</th>
-            <th>Profit</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for trade in trade_history[:5] %}
-        <tr>
-            <td>{{ trade.time }}</td>
-            <td>{{ trade.symbol }}</td>
-            <td>{{ trade.buy_exchange }}</td>
-            <td>{{ trade.sell_exchange }}</td>
-            <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
-                {{ "✅ Profit" if trade.profit > 0 else "❌ Loss" if trade.profit < 0 else "⚠️ Unknown" }}
-            </td>
-            <td>${{ "%.2f"|format(trade.profit) if trade.profit else "N/A" }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
+    <tr>
+        <th>Time</th>
+        <th>Coin</th>
+        <th>Buy On</th>
+        <th>Sell On</th>
+        <th>Status</th>
+        <th>Profit ($)</th>
+    </tr>
+    {% for trade in trade_history[:5] %}
+    <tr>
+        <td>{{ trade.time }}</td>
+        <td>{{ trade.symbol }}</td>
+        <td>{{ trade.buy_exchange }}</td>
+        <td>{{ trade.sell_exchange }}</td>
+        <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
+            {{ "✅ Profit" if trade.profit > 0 else "❌ Loss" if trade.profit < 0 else "-" }}
+        </td>
+        <td>${{ "%.2f"|format(trade.profit) if trade.profit else "N/A" }}</td>
+    </tr>
+    {% endfor %}
 </table>
-{% else %}
-<p style="text-align:center; margin-top:20px;">No trades executed yet.</p>
 {% endif %}
 
 <footer>
@@ -197,8 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
     async function updatePrices() {
         try {
             const res = await fetch("/update_prices");
-            if (!res.ok) throw new Error("Network response was not ok");
-
+            if (!res.ok) throw new Error("Network error");
             const data = await res.json();
 
             Object.entries(data).forEach(([coin, prices]) => {
@@ -228,7 +217,6 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(updatePrices, 1000);
     updatePrices();
 
-    // Trade execution feedback
     function executeTrade(symbol, buyExchange, sellExchange) {
         fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
             .then(async (response) => {
