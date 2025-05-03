@@ -9,6 +9,7 @@
             margin: 0;
             padding: 0;
             background-color: #f4f6f9;
+            color: #333;
         }
 
         h1 {
@@ -46,6 +47,22 @@
             font-weight: bold;
         }
 
+        .balance-table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .trade-history-table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
         button {
             margin: 5px;
             padding: 8px 12px;
@@ -66,27 +83,55 @@
             font-size: 12px;
             color: #666;
         }
-
-        .trade-history-table {
-            width: 90%;
-            margin: 30px auto;
-            border-collapse: collapse;
-            background-color: #fff;
-        }
-
-        .trade-success {
-            color: green;
-        }
-
-        .trade-failed {
-            color: red;
-        }
     </style>
 </head>
 <body>
 
 <h1>Crypto Arbitrage Dashboard</h1>
 
+<!-- Balances -->
+<div style="display:flex; justify-content:space-around; flex-wrap:wrap;">
+    <!-- Binance Balance -->
+    <div>
+        <h2>Binance Balances</h2>
+        {% if binance_balance.success %}
+        <table class="balance-table">
+            <tr><th>Asset</th><th>Free</th><th>Locked</th></tr>
+            {% for asset in binance_balance.data %}
+            <tr>
+                <td>{{ asset.asset }}</td>
+                <td>{{ "%.4f"|format(asset.free|float) }}</td>
+                <td>{{ "%.4f"|format(asset.locked|float) }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <p style="color:red;">{{ binance_balance.error }}</p>
+        {% endif %}
+    </div>
+
+    <!-- OKX Balance -->
+    <div>
+        <h2>OKX Balances</h2>
+        {% if okx_balance.success %}
+        <table class="balance-table">
+            <tr><th>Currency</th><th>Available</th><th>Frozen</th></tr>
+            {% set okx_data = okx_balance.data[0] %}
+            {% for currency in okx_data.details %}
+            <tr>
+                <td>{{ currency.ccy }}</td>
+                <td>{{ "%.4f"|format(currency.available|float) }}</td>
+                <td>{{ "%.4f"|format(currency.frozen|float) }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <p style="color:red;">{{ okx_balance.error }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Price Table -->
 <table id="crypto-table">
     <thead>
         <tr>
@@ -117,7 +162,7 @@
 {% if trade_history %}
 <h2 style="text-align:center;">Recent Trades</h2>
 <table class="trade-history-table">
-    <tr style="background:#2c3e50; color:white;">
+    <tr>
         <th>Time</th>
         <th>Coin</th>
         <th>Buy On</th>
@@ -131,71 +176,110 @@
         <td>{{ trade.buy_exchange }}</td>
         <td>{{ trade.sell_exchange }}</td>
         <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
-            ${{ "%.2f"|format(trade.profit) if trade.profit else "N/A" }}
+            ${{ "%.2f"|format(trade.profit) }}
         </td>
     </tr>
     {% endfor %}
 </table>
-{% else %}
-<p style="text-align:center; margin-top:30px;">No trades executed yet.</p>
 {% endif %}
 
 <footer>Prices refresh every second...</footer>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-    async function updatePrices() {
-        try {
-            const res = await fetch("/update_prices");
-            if (!res.ok) throw new Error("Failed to update prices");
+    document.addEventListener("DOMContentLoaded", () => {
+        async function updatePrices() {
+            try {
+                const res = await fetch("/update_prices");
+                const data = await res.json();
 
+                Object.entries(data).forEach(([coin, prices]) => {
+                    const row = document.querySelector(`tr[data-symbol="${coin}"]`);
+                    if (!row) return;
+
+                    const binanceCell = row.querySelector('[data-exchange="Binance"]');
+                    const okxCell = row.querySelector('[data-exchange="OKX"]');
+                    const diffCell = document.getElementById(`diff-${coin}`);
+
+                    if (prices.Binance !== undefined) binanceCell.textContent = `$${prices.Binance.toFixed(2)}`;
+                    if (prices.OKX !== undefined) okxCell.textContent = `$${prices.OKX.toFixed(2)}`;
+
+                    if (prices.Binance && prices.OKX) {
+                        const diff = Math.abs(prices.Binance - prices.OKX);
+                        diffCell.innerHTML = `<strong>${diff.toFixed(2)}</strong>`;
+                        row.classList.toggle("highlight", diff > 0.5);
+                    } else {
+                        diffCell.textContent = "N/A";
+                    }
+                });
+            } catch (err) {
+                console.error("Price update failed:", err);
+            }
+        }
+
+        setInterval(updatePrices, 1000);
+        updatePrices();
+    });
+
+    // Fetch balances every 10s
+    async function updateBalances() {
+        try {
+            const res = await fetch("/get_balance");
             const data = await res.json();
 
-            Object.entries(data).forEach(([coin, prices]) => {
-                const row = document.querySelector(`tr[data-symbol="${coin}"]`);
-                if (!row) return;
+            const binanceData = data.binance.data || [];
+            const okxData = data.okx.data ? data.okx.data[0].details : [];
 
-                const binanceCell = row.querySelector('[data-exchange="Binance"]');
-                const okxCell = row.querySelector('[data-exchange="OKX"]');
-                const diffCell = document.getElementById(`diff-${coin}`);
+            const binanceBalanceContainer = document.getElementById("binance-balances");
+            const okxBalanceContainer = document.getElementById("okx-balances");
 
-                if (prices.Binance !== undefined) binanceCell.textContent = `$${prices.Binance.toFixed(2)}`;
-                if (prices.OKX !== undefined) okxCell.textContent = `$${prices.OKX.toFixed(2)}`;
+            binanceBalanceContainer.innerHTML = "";
+            okxBalanceContainer.innerHTML = "";
 
-                if (prices.Binance && prices.OKX) {
-                    const diff = Math.abs(prices.Binance - prices.OKX);
-                    diffCell.innerHTML = `<strong>${diff.toFixed(2)}</strong>`;
-                    row.classList.toggle("highlight", diff > 0.5);
-                } else {
-                    diffCell.textContent = "N/A";
-                }
+            binanceData.forEach(asset => {
+                binanceBalanceContainer.innerHTML += `
+                    <tr>
+                        <td>${asset.asset}</td>
+                        <td>${parseFloat(asset.free).toFixed(4)}</td>
+                        <td>${parseFloat(asset.locked).toFixed(4)}</td>
+                    </tr>
+                `;
             });
+
+            okxData.forEach(currency => {
+                okxBalanceContainer.innerHTML += `
+                    <tr>
+                        <td>${currency.ccy}</td>
+                        <td>${parseFloat(currency.available).toFixed(4)}</td>
+                        <td>${parseFloat(currency.frozen).toFixed(4)}</td>
+                    </tr>
+                `;
+            });
+
         } catch (err) {
-            console.error("Price update failed:", err);
+            console.error("Failed to fetch balances:", err);
         }
     }
 
-    setInterval(updatePrices, 1000);
-    updatePrices();
-});
+    setInterval(updateBalances, 10000);
+    updateBalances();
 
-function executeTrade(symbol, buyExchange, sellExchange) {
-    fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
-        .then(async (response) => {
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`HTTP error! Status: ${response.status}, Body: ${errText}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            alert(data.message || JSON.stringify(data));
-        })
-        .catch(error => {
-            console.error("Frontend JS error:", error);
-            alert("🚨 Network or API error:\nCheck browser console.");
-        });
-}
+    // Trade execution
+    function executeTrade(symbol, buyExchange, sellExchange) {
+        fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Network error");
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert(data.message || JSON.stringify(data));
+            })
+            .catch(error => {
+                console.error("Frontend error:", error);
+                alert("🚨 Trade failed. Check console.");
+            });
+    }
 </script>
 
 </body>
