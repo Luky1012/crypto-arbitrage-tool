@@ -41,25 +41,26 @@ PERIOD = 60
 @sleep_and_retry
 @limits(calls=CALLS, period=PERIOD)
 def get_binance_server_time():
-    """Fetch Binance server time for API requests."""
-    url = "https://api.binance.com/api/v3/time"
+    url = "https://testnet.binance.vision"
     try:
         response = requests.get(url)
-        response.raise_for_status()
+        response.raise_for_status()  # Raise exception if status != 200
         return response.json()["serverTime"]
     except requests.RequestException as e:
-        logger.error(f"Error fetching Binance server time: {safe_log(str(e))}")
+        logger.error(f"Error fetching Binance server time: {str(e)}")
         return None
 
 @sleep_and_retry
 @limits(calls=CALLS, period=PERIOD)
 @retry(tries=3, delay=1, backoff=2)
-def fetch_binance_balance():
-    """Fetch account balances from Binance."""
-    try:
-        timestamp = get_binance_server_time()
-        if not timestamp:
-            raise ValueError("Could not fetch server time")
+timestamp = get_binance_server_time()
+if not timestamp:
+    logger.error("Could not fetch Binance server time")
+    return {}
+
+if not BINANCE_API_KEY or not BINANCE_API_SECRET:
+    logger.error("Binance API keys are missing")
+    return {}
 
         # Prepare signed request
         query_string = f"timestamp={timestamp}"
@@ -69,7 +70,7 @@ def fetch_binance_balance():
             hashlib.sha256
         ).hexdigest()
 
-        url = "https://api.binance.com/api/v3/account"
+        url = "https://testnet.binance.vision/v3/account"
         headers = {"X-MBX-APIKEY": BINANCE_API_KEY}
         params = {"timestamp": timestamp, "signature": signature}
 
@@ -88,17 +89,16 @@ def fetch_binance_balance():
         return {}
 
 @sleep_and_retry
-@limits(calls=CALLS, period=PERIOD)
+@limits(calls=100, period=60)  # Max 100 calls per minute
 def fetch_binance_order_book(symbol, limit=100):
-    """Fetch order book for a trading pair."""
-    url = "https://api.binance.com/api/v3/depth"
+    url = f"{BINANCE_API_URL}/api/v3/depth"
     params = {"symbol": symbol, "limit": limit}
     try:
         response = requests.get(url, params=params)
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
-        logger.error(f"Error fetching order book for {symbol}: {safe_log(str(e))}")
+        logger.error(f"Error fetching order book for {symbol}: {str(e)}")
         return {}
 
 def find_arbitrage_opportunities():
@@ -124,10 +124,10 @@ scheduler.add_job(find_arbitrage_opportunities, "interval", minutes=5)
 scheduler.start()
 
 @app.route("/")
+@app.route("/")
 def dashboard():
-    """Render the main dashboard with balance and arbitrage data."""
     try:
-        binance_balances = fetch_binance_balance()
+        binance_balances = fetch_binance_balance() or {}
         arbitrage_opps = find_arbitrage_opportunities()
         return render_template(
             "dashboard.html",
@@ -135,7 +135,7 @@ def dashboard():
             opportunities=arbitrage_opps
         )
     except Exception as e:
-        logger.error(f"Error rendering dashboard: {safe_log(str(e))}")
+        logger.error(f"Error rendering dashboard: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/api/balances")
