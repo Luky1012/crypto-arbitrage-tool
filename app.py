@@ -21,28 +21,27 @@ logger = logging.getLogger(__name__)
 
 # Exchange URLs
 BINANCE_API_URL = "https://testnet.binance.vision"
-OKX_API_URL = "https://www.okx.com"
+KRAKEN_API_URL = "https://api.kraken.com"
 
 # Load API keys
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
-OKX_API_KEY = os.getenv("OKX_API_KEY")
-OKX_SECRET_KEY = os.getenv("OKX_SECRET_KEY")
-OKX_PASSPHRASE = os.getenv("OKX_PASSPHRASE")
+KRAKEN_API_KEY = os.getenv("KRAKEN_API_KEY")
+KRAKEN_SECRET_KEY = os.getenv("KRAKEN_SECRET_KEY")
 
-if not all([BINANCE_API_KEY, BINANCE_SECRET_KEY, OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE]):
-    raise ValueError("One or more API keys are missing!")
+if not all([BINANCE_API_KEY, BINANCE_SECRET_KEY]):
+    raise ValueError("Binance API keys are missing or invalid.")
 
 # Supported symbols
 SUPPORTED_SYMBOLS = {
-    'BTC': {'binance': 'BTCUSDT', 'okx': 'BTC-USDT'},
-    'ETH': {'binance': 'ETHUSDT', 'okx': 'ETH-USDT'},
-    'XRP': {'binance': 'XRPUSDT', 'okx': 'XRP-USDT'},
-    'ADA': {'binance': 'ADAUSDT', 'okx': 'ADA-USDT'},
-    'SOL': {'binance': 'SOLUSDT', 'okx': 'SOL-USDT'}
+    'BTC': {'binance': 'BTCUSDT', 'kraken': 'BTCUSD'},
+    'ETH': {'binance': 'ETHUSDT', 'kraken': 'ETHUSD'},
+    'XRP': {'binance': 'XRPUSDT', 'kraken': 'XRPUSD'},
+    'ADA': {'binance': 'ADAUSDT', 'kraken': 'ADAUSD'},
+    'SOL': {'binance': 'SOLUSDT', 'kraken': 'SOLUSD'}
 }
 
-# Get server times
+# Get Binance server time
 def get_binance_server_time():
     url = f"{BINANCE_API_URL}/api/v3/time"
     try:
@@ -52,128 +51,9 @@ def get_binance_server_time():
         logger.error(f"Error fetching Binance server time: {e}")
         return int(time.time() * 1000)
 
-def get_okx_server_time():
-    url = f"{OKX_API_URL}/api/v5/public/time"
-    try:
-        response = requests.get(url)
-        data = response.json()
-        return int(data['data'][0]['ts'])
-    except Exception as e:
-        logger.error(f"Error fetching OKX server time: {e}")
-        return int(time.time())
-
-# Sign OKX request
-def sign_okx_request(timestamp, method, request_path, body=""):
-    message = f"{timestamp}{method}{request_path}{body}"
-    signature = hmac.new(
-        OKX_SECRET_KEY.encode('utf-8'),
-        message.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
-    return signature
-
-# Fetch prices
-def fetch_binance_prices():
-    prices = {}
-    for symbol_info in SUPPORTED_SYMBOLS.values():
-        try:
-            res = requests.get(
-                f"{BINANCE_API_URL}/api/v3/ticker/price",
-                params={"symbol": symbol_info['binance']}
-            )
-            prices[symbol_info['binance']] = float(res.json()['price'])
-        except Exception as e:
-            logger.error(f"Error fetching {symbol_info['binance']} from Binance: {e}")
-    return prices
-
-def fetch_okx_prices():
-    prices = {}
-    for symbol_info in SUPPORTED_SYMBOLS.values():
-        try:
-            res = requests.get(
-                f"{OKX_API_URL}/api/v5/market/ticker",
-                params={"instId": symbol_info['okx']}
-            )
-            data = res.json()
-            prices[symbol_info['okx']] = float(data['data'][0]['last'])
-        except Exception as e:
-            logger.error(f"Error fetching {symbol_info['okx']} from OKX: {e}")
-    return prices
-
-# Fetch usable balance (e.g., USDT)
-@retry(tries=3, delay=1)
-def fetch_binance_usdt_balance():
-    try:
-        timestamp = get_binance_server_time()
-        query_string = f"timestamp={timestamp}"
-        signature = hmac.new(
-            BINANCE_SECRET_KEY.encode('utf-8'),
-            query_string.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
-
-        headers = {"X-MBX-APIKEY": BINANCE_API_KEY}
-        params = {
-            "timestamp": timestamp,
-            "signature": signature
-        }
-
-        response = requests.get(
-            f"{BINANCE_API_URL}/api/v3/account",
-            headers=headers,
-            params=params
-        )
-
-        data = response.json()
-        for asset in data.get("balances", []):
-            if asset["asset"] == "USDT":
-                return {
-                    "success": True,
-                    "free": float(asset["free"]),
-                    "locked": float(asset["locked"]),
-                    "total": float(asset["free"]) + float(asset["locked"])
-                }
-        return {"success": False, "error": "No USDT balance found"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@retry(tries=3, delay=1)
-def fetch_okx_usdt_balance():
-    try:
-        timestamp = str(get_okx_server_time())
-        method = "GET"
-        request_path = "/api/v5/account/balance"
-        body = {"instType": "SPOT"}
-        body_str = json.dumps(body)
-        signature = sign_okx_request(timestamp, method, request_path, body_str)
-
-        headers = {
-            "OK-ACCESS-KEY": OKX_API_KEY,
-            "OK-ACCESS-SIGN": signature,
-            "OK-ACCESS-TIMESTAMP": timestamp,
-            "OK-ACCESS-PASSPHRASE": OKX_PASSPHRASE,
-            "Content-Type": "application/json"
-        }
-
-        response = requests.get(
-            f"{OKX_API_URL}{request_path}",
-            headers=headers,
-            params={"ccy": "USDT"}
-        )
-
-        data = response.json()
-        for detail in data.get("data", [{}])[0].get("details", []):
-            if detail["ccy"] == "USDT":
-                return {
-                    "success": True,
-                    "available": float(detail["availBal"]),
-                    "frozen": float(detail["frozenBal"]),
-                    "total": float(detail["availBal"]) + float(detail["frozenBal"])
-                }
-        return {"success": False, "error": "No USDT balance found"}
-
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+# No need to fetch server time from Kraken (public API doesn't require it)
+def get_kraken_server_time():
+    return int(time.time())
 
 # Quantity rounding
 def get_binance_lot_size(symbol):
@@ -196,6 +76,80 @@ def get_binance_lot_size(symbol):
 def round_quantity(quantity, step_size, precision):
     rounded = round(quantity / step_size) * step_size
     return float(f"{rounded:.{precision}f}")
+
+# Fetch prices
+def fetch_binance_prices():
+    prices = {}
+    for symbol_info in SUPPORTED_SYMBOLS.values():
+        try:
+            res = requests.get(
+                f"{BINANCE_API_URL}/api/v3/ticker/price",
+                params={"symbol": symbol_info['binance']}
+            )
+            prices[symbol_info['binance']] = float(res.json()['price'])
+        except Exception as e:
+            logger.error(f"Error fetching {symbol_info['binance']} from Binance: {e}")
+    return prices
+
+def fetch_kraken_prices():
+    prices = {}
+    for symbol_info in SUPPORTED_SYMBOLS.values():
+        kraken_symbol = symbol_info['kraken']
+        try:
+            res = requests.get(
+                f"{KRAKEN_API_URL}/0/public/Ticker",
+                params={"pair": kraken_symbol}
+            )
+            data = res.json()
+            result = data.get("result", {}).get(kraken_symbol, {})
+            price = float(result.get("c", [0])[0])
+            prices[kraken_symbol] = price
+        except Exception as e:
+            logger.error(f"Error fetching {kraken_symbol} from Kraken: {e}")
+    return prices
+
+# Fetch balance (simulate for Kraken until real API works)
+@retry(tries=3, delay=1)
+def fetch_binance_balance():
+    try:
+        timestamp = get_binance_server_time()
+        query_string = f"timestamp={timestamp}"
+        signature = hmac.new(
+            BINANCE_SECRET_KEY.encode('utf-8'),
+            query_string.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+
+        headers = {"X-MBX-APIKEY": BINANCE_API_KEY}
+        params = {
+            "timestamp": timestamp,
+            "signature": signature
+        }
+
+        response = requests.get(
+            f"{BINANCE_API_URL}/api/v3/account",
+            headers=headers,
+            params=params
+        )
+
+        data = response.json()
+        balances = [
+            {"asset": asset["asset"], "free": asset["free"], "locked": asset["locked"]}
+            for asset in data.get("balances", [])
+            if float(asset.get("free", 0)) > 0 or float(asset.get("locked", 0)) > 0
+        ]
+        return {"success": True, "data": balances}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+def fetch_kraken_balance():
+    # Simulate Kraken balance until real API is added
+    return {
+        "success": True,
+        "available": 100.0,
+        "frozen": 0.0,
+        "total": 100.0
+    }
 
 # Execute trades
 def execute_binance_trade(symbol, side, quantity):
@@ -228,38 +182,15 @@ def execute_binance_trade(symbol, side, quantity):
     except Exception as e:
         return {"error": str(e)}
 
-def execute_okx_trade(symbol, side, size):
-    try:
-        timestamp = str(get_okx_server_time())
-        method = "POST"
-        request_path = "/api/v5/trade/order"
-        body = {
-            "instId": symbol,
-            "tdMode": "cash",
-            "side": side.lower(),
-            "ordType": "market",
-            "sz": str(size)
+def execute_kraken_trade(symbol, side, size):
+    # Simulate Kraken trade execution
+    simulated_price = fetch_kraken_prices().get(symbol, 0)
+    return {
+        "success": True,
+        "data": {
+            "fillPx": simulated_price
         }
-        body_str = json.dumps(body)
-        signature = sign_okx_request(timestamp, method, request_path, body_str)
-
-        headers = {
-            "OK-ACCESS-KEY": OKX_API_KEY,
-            "OK-ACCESS-SIGN": signature,
-            "OK-ACCESS-TIMESTAMP": timestamp,
-            "OK-ACCESS-PASSPHRASE": OKX_PASSPHRASE,
-            "Content-Type": "application/json"
-        }
-
-        response = requests.post(
-            f"{OKX_API_URL}{request_path}",
-            headers=headers,
-            data=body_str
-        )
-
-        return response.json()
-    except Exception as e:
-        return {"error": str(e)}
+    }
 
 # Global trade history list
 trade_history = []
@@ -267,37 +198,40 @@ trade_history = []
 @app.route('/')
 def dashboard():
     binance_prices = fetch_binance_prices()
-    okx_prices = fetch_okx_prices()
+    kraken_prices = fetch_kraken_prices()
 
-    # Fetch only USDT balance
-    binance_balance = fetch_binance_usdt_balance()
-    okx_balance = fetch_okx_usdt_balance()
+    # Fetch balances
+    binance_balance = fetch_binance_balance()
+    kraken_balance = fetch_kraken_balance()
 
     crypto_data = {}
     for symbol, names in SUPPORTED_SYMBOLS.items():
+        b_price = binance_prices.get(names['binance'])
+        k_price = kraken_prices.get(names['kraken'])
+
         crypto_data[symbol] = {
-            "Binance": binance_prices.get(names['binance']),
-            "OKX": okx_prices.get(names['okx'])
+            "Binance": b_price,
+            "Kraken": k_price
         }
 
     return render_template(
         'dashboard.html',
         crypto_data=crypto_data,
         binance_balance=binance_balance,
-        okx_balance=okx_balance,
+        kraken_balance=kraken_balance,
         trade_history=trade_history
     )
 
 @app.route('/update_prices')
 def update_prices():
     binance_prices = fetch_binance_prices()
-    okx_prices = fetch_okx_prices()
+    kraken_prices = fetch_kraken_prices()
 
     combined = {}
     for sym, name in SUPPORTED_SYMBOLS.items():
         combined[sym] = {
             "Binance": binance_prices.get(name['binance']),
-            "OKX": okx_prices.get(name['okx'])
+            "Kraken": kraken_prices.get(name['kraken'])
         }
 
     return jsonify(combined)
@@ -311,31 +245,34 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
         return jsonify({"success": False, "message": f"Invalid symbol: {symbol}"}), 400
 
     binance_symbol = name_map['binance']
-    okx_symbol = name_map['okx']
+    kraken_symbol = name_map['kraken']
 
     price_data = fetch_binance_prices()
-    price = price_data.get(name_map['binance'], 0.01)
+    price = price_data.get(binance_symbol, 0.01)
     raw_quantity = max(0.01, 10 / price) if price > 0 else 0.01
 
     step_size, precision = get_binance_lot_size(binance_symbol)
     if not step_size:
-        return jsonify({"success": False, "message": "LOT_SIZE filter not found"}), 500
+        return jsonify({"success": False, "message": "LOT_SIZE not found"}), 500
 
     quantity = round_quantity(raw_quantity, step_size, precision)
 
-    if buy_exchange == "Binance" and sell_exchange == "OKX":
+    if buy_exchange == "Binance" and sell_exchange == "Kraken":
         buy_response = execute_binance_trade(binance_symbol, "BUY", quantity)
-        sell_response = execute_okx_trade(okx_symbol, "sell", quantity)
+        sell_response = execute_kraken_trade(kraken_symbol, "sell", quantity)
 
-        profit = float(sell_response.get('data', {}).get('fillPx', 0)) - float(buy_response.get('price', 0))
+        buy_price = float(buy_response.get('price', 0))
+        sell_price = float(sell_response.get('data', {}).get('fillPx', 0))
+
+        profit = sell_price - buy_price
 
         trade_entry = {
             "time": time.strftime('%Y-%m-%d %H:%M:%S'),
             "symbol": symbol,
             "buy_exchange": buy_exchange,
             "sell_exchange": sell_exchange,
-            "buy_price": buy_response.get('price', 0),
-            "sell_price": sell_response.get('data', {}).get('fillPx', 0),
+            "buy_price": buy_price,
+            "sell_price": sell_price,
             "quantity": quantity,
             "profit": profit,
             "status": "PROFIT" if profit > 0 else "LOSS"
@@ -345,22 +282,28 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
 
         return jsonify({
             "success": True,
-            "message": f"✅ Buy {symbol} on Binance, Sell on OKX\nProfit: ${profit:.2f}",
-            "trade": trade_entry
+            "message": f"✅ Buy {symbol} on Binance, Sell on Kraken\nProfit: ${profit:.2f}",
+            "details": {
+                "buy": buy_response,
+                "sell": sell_response
+            }
         })
 
-    elif buy_exchange == "OKX" and sell_exchange == "Binance":
-        buy_response = execute_okx_trade(okx_symbol, "buy", quantity)
+    elif buy_exchange == "Kraken" and sell_exchange == "Binance":
+        buy_response = execute_kraken_trade(kraken_symbol, "buy", quantity)
         sell_response = execute_binance_trade(binance_symbol, "SELL", quantity)
 
-        profit = float(sell_response.get('price', 0)) - float(buy_response.get('data', {}).get('fillPx', 0))
+        buy_price = float(buy_response.get('data', {}).get('fillPx', 0))
+        sell_price = float(sell_response.get('price', 0))
+
+        profit = sell_price - buy_price
 
         trade_entry = {
             "time": time.strftime('%Y-%m-%d %H:%M:%S'),
             "symbol": symbol,
             "buy_exchange": buy_exchange,
             "sell_exchange": sell_exchange,
-            "buy_price": buy_response.get('data', {}).get('fillPx', 0),
+            "buy_price": buy_price,
             "sell_price": sell_response.get('price', 0),
             "quantity": quantity,
             "profit": profit,
@@ -371,16 +314,11 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
 
         return jsonify({
             "success": True,
-            "message": f"✅ Buy {symbol} on OKX, Sell on Binance\nProfit: ${profit:.2f}",
-            "trade": trade_entry
+            "message": f"✅ Buy {symbol} on Kraken, Sell on Binance\nProfit: ${profit:.2f}",
+            "details": {
+                "buy": buy_response,
+                "sell": sell_response
+            }
         })
     else:
         return jsonify({"success": False, "error": "Invalid exchange pair"})
-
-# Start background scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(fetch_binance_prices, 'interval', seconds=10)
-scheduler.start()
-
-if __name__ == '__main__':
-    app.run(debug=True)

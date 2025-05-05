@@ -9,7 +9,6 @@
             margin: 0;
             padding: 0;
             background-color: #f4f6f9;
-            color: #333;
         }
 
         h1 {
@@ -38,23 +37,12 @@
             min-width: 300px;
         }
 
-        .balance-box h2 {
-            margin-top: 0;
-        }
-
-        .balance-box p {
-            font-size: 1.2rem;
-            margin: 5px 0;
-        }
-
         table {
             width: 90%;
             margin: 20px auto;
             border-collapse: collapse;
             background-color: #fff;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            border-radius: 8px;
-            overflow: hidden;
         }
 
         th, td {
@@ -80,10 +68,10 @@
         button {
             margin: 5px;
             padding: 8px 12px;
+            cursor: pointer;
             background-color: #2c3e50;
             color: white;
             border: none;
-            cursor: pointer;
             border-radius: 4px;
         }
 
@@ -103,7 +91,6 @@
             margin: 30px auto;
             border-collapse: collapse;
             background-color: #fff;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
 
         .trade-success {
@@ -119,28 +106,24 @@
 
 <h1>Crypto Arbitrage Dashboard</h1>
 
-<!-- Usable Balance -->
+<!-- Balances -->
 <div class="balance-section">
     <!-- Binance USDT Balance -->
     <div class="balance-box">
         <h2>Binance USDT</h2>
         {% if binance_balance.success %}
-        <p>Available: ${{ "%.2f"|format(binance_balance.free) }}</p>
-        <p>Total: ${{ "%.2f"|format(binance_balance.total) }}</p>
+        <p><strong>Available:</strong> ${{ "%.2f"|format(binance_balance.data[0].free|float) }}</p>
+        <p><strong>Total:</strong> ${{ "%.2f"|format((binance_balance.data[0].free|float) + (binance_balance.data[0].locked|float)) }}</p>
         {% else %}
         <p style="color:red;">{{ binance_balance.error }}</p>
         {% endif %}
     </div>
 
-    <!-- OKX USDT Balance -->
+    <!-- Kraken USDT Balance (Simulated) -->
     <div class="balance-box">
-        <h2>OKX USDT</h2>
-        {% if okx_balance.success %}
-        <p>Available: ${{ "%.2f"|format(okx_balance.available) }}</p>
-        <p>Total: ${{ "%.2f"|format(okx_balance.total) }}</p>
-        {% else %}
-        <p style="color:red;">{{ okx_balance.error }}</p>
-        {% endif %}
+        <h2>Kraken USDT</h2>
+        <p><strong>Available:</strong> ${{ "%.2f"|format(kraken_balance.available) }}</p>
+        <p><strong>Total:</strong> ${{ "%.2f"|format(kraken_balance.total) }}</p>
     </div>
 </div>
 
@@ -150,7 +133,7 @@
         <tr>
             <th>Cryptocurrency</th>
             <th>Binance</th>
-            <th>OKX</th>
+            <th>Kraken</th>
             <th>Difference ($)</th>
             <th>Action</th>
         </tr>
@@ -160,11 +143,11 @@
         <tr data-symbol="{{ coin }}">
             <td>{{ coin }}</td>
             <td data-exchange="Binance">${{ "%.2f"|format(prices.Binance) if prices.Binance else "N/A" }}</td>
-            <td data-exchange="OKX">${{ "%.2f"|format(prices.OKX) if prices.OKX else "N/A" }}</td>
-            <td id="diff-{{ coin }}">{{ "%.2f"|format(prices.Binance - prices.OKX) if prices.Binance and prices.OKX else "N/A" }}</td>
+            <td data-exchange="Kraken">${{ "%.2f"|format(prices.Kraken) if prices.Kraken else "N/A" }}</td>
+            <td id="diff-{{ coin }}">{{ "%.2f"|format(prices.Binance - prices.Kraken) if prices.Binance and prices.Kraken else "N/A" }}</td>
             <td>
-                <button onclick="executeTrade('{{ coin }}', 'Binance', 'OKX')">Buy Binance → Sell OKX</button>
-                <button onclick="executeTrade('{{ coin }}', 'OKX', 'Binance')">Buy OKX → Sell Binance</button>
+                <button onclick="executeTrade('{{ coin }}', 'Binance', 'Kraken')">Buy Binance → Sell Kraken</button>
+                <button onclick="executeTrade('{{ coin }}', 'Kraken', 'Binance')">Buy Kraken → Sell Binance</button>
             </td>
         </tr>
         {% endfor %}
@@ -183,7 +166,7 @@
         <td>{{ trade.buy_exchange }}</td>
         <td>{{ trade.sell_exchange }}</td>
         <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
-            ${{ "%.2f"|format(trade.profit) if trade.profit else "N/A" }}
+            ${{ "%.2f"|format(trade.profit) }}
         </td>
     </tr>
     {% endfor %}
@@ -206,14 +189,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (!row) return;
 
                 const binanceCell = row.querySelector('[data-exchange="Binance"]');
-                const okxCell = row.querySelector('[data-exchange="OKX"]');
+                const krakenCell = row.querySelector('[data-exchange="Kraken"]');
                 const diffCell = document.getElementById(`diff-${coin}`);
 
                 if (prices.Binance !== undefined) binanceCell.textContent = `$${prices.Binance.toFixed(2)}`;
-                if (prices.OKX !== undefined) okxCell.textContent = `$${prices.OKX.toFixed(2)}`;
+                if (prices.Kraken !== undefined) krakenCell.textContent = `$${prices.Kraken.toFixed(2)}`;
 
-                if (prices.Binance && prices.OKX) {
-                    const diff = Math.abs(prices.Binance - prices.OKX);
+                if (prices.Binance && prices.Kraken) {
+                    const diff = Math.abs(prices.Binance - prices.Kraken);
                     diffCell.innerHTML = `<strong>${diff.toFixed(2)}</strong>`;
                     row.classList.toggle("highlight", diff > 0.5);
                 } else {
@@ -229,7 +212,6 @@ document.addEventListener("DOMContentLoaded", () => {
     updatePrices();
 });
 
-// Trade execution feedback
 function executeTrade(symbol, buyExchange, sellExchange) {
     fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
         .then(response => {
