@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 # Exchange URLs
 BINANCE_API_URL = "https://testnet.binance.vision"
+KRAKEN_API_URL = "https://api.kraken.com"
 
-# Load Binance Testnet API keys
+# Load Binance API keys
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
 
@@ -29,9 +30,11 @@ if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
 
 # Supported symbols
 SUPPORTED_SYMBOLS = {
-    'BTC': {'binance': 'BTCUSDT', 'other': 'BTCUSD'},
-    'ETH': {'binance': 'ETHUSDT', 'other': 'ETHUSD'},
-    'XRP': {'binance': 'XRPUSDT', 'other': 'XRPUSD'}
+    'BTC': {'binance': 'BTCUSDT', 'kraken': 'XBTUSD'},
+    'ETH': {'binance': 'ETHUSDT', 'kraken': 'ETHUSD'},
+    'XRP': {'binance': 'XRPUSDT', 'kraken': 'XRPUSD'},
+    'ADA': {'binance': 'ADAUSDT', 'kraken': 'ADAUSD'},
+    'SOL': {'binance': 'SOLUSDT', 'kraken': 'SOLUSD'}
 }
 
 # Get Binance server time
@@ -58,15 +61,22 @@ def fetch_binance_prices():
             logger.error(f"Error fetching {symbol_info['binance']} from Binance: {e}")
     return prices
 
-# Simulate second exchange prices with small difference
-def fetch_other_prices():
-    binance_prices = fetch_binance_prices()
-    simulated = {}
+# Fetch prices from Kraken
+def fetch_kraken_prices():
+    prices = {}
     for symbol_info in SUPPORTED_SYMBOLS.values():
-        binance_price = binance_prices.get(symbol_info['binance'], 0)
-        # Add ±1% spread to simulate arbitrage opportunity
-        simulated[symbol_info['other']] = round(binance_price * (1 + random.uniform(-0.01, 0.01)), 2)
-    return simulated
+        kraken_symbol = symbol_info['kraken']
+        try:
+            res = requests.get(
+                f"{KRAKEN_API_URL}/0/public/Ticker",
+                params={"pair": kraken_symbol}
+            )
+            result = res.json()
+            price = float(result['result'][kraken_symbol]['c'][0])
+            prices[kraken_symbol] = price
+        except Exception as e:
+            logger.error(f"Error fetching {kraken_symbol} from Kraken: {e}")
+    return prices
 
 # Quantity rounding
 def get_binance_lot_size(symbol):
@@ -121,11 +131,12 @@ def execute_binance_trade(symbol, side, quantity):
     except Exception as e:
         return {"error": str(e)}
 
-# Simulate trade execution on other exchange
-def execute_other_trade(symbol, side, size):
+# Simulate Kraken trades
+def execute_kraken_trade(symbol, side, size):
+    # For now, just simulate successful trade
     return {
         "success": True,
-        "price": fetch_other_prices().get(symbol, 0),
+        "price": fetch_kraken_prices().get(symbol, 0),
         "status": "filled"
     }
 
@@ -135,38 +146,39 @@ trade_history = []
 @app.route('/')
 def dashboard():
     binance_prices = fetch_binance_prices()
-    other_prices = fetch_other_prices()
+    kraken_prices = fetch_kraken_prices()
 
     crypto_data = {}
     for symbol, names in SUPPORTED_SYMBOLS.items():
         crypto_data[symbol] = {
             "Binance": binance_prices.get(names['binance']),
-            "OtherExchange": other_prices.get(names['other'])
+            "Kraken": kraken_prices.get(names['kraken'])
         }
 
-    # Simulated balance
+    # Simulated balance (will update once real balance API works)
     binance_balance = {"USDT": 1000.0}
-    other_balance = {"USDT": 1000.0}
+    kraken_balance = {"USD": 1000.0}
 
     return render_template(
         'dashboard.html',
         crypto_data=crypto_data,
         binance_balance=binance_balance,
-        other_balance=other_balance,
+        kraken_balance=kraken_balance,
         trade_history=trade_history
     )
 
 @app.route('/update_prices')
 def update_prices():
     binance_prices = fetch_binance_prices()
-    other_prices = fetch_other_prices()
+    kraken_prices = fetch_kraken_prices()
 
     combined = {}
     for sym, name in SUPPORTED_SYMBOLS.items():
         combined[sym] = {
             "Binance": binance_prices.get(name['binance']),
-            "OtherExchange": other_prices.get(name['other'])
+            "Kraken": kraken_prices.get(name['kraken'])
         }
+
     return jsonify(combined)
 
 @app.route('/execute_trade/<symbol>/<buy_exchange>/<sell_exchange>')
@@ -178,10 +190,10 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
         return jsonify({"success": False, "message": f"Invalid symbol: {symbol}"}), 400
 
     binance_symbol = name_map['binance']
+    kraken_symbol = name_map['kraken']
 
-    # Estimate quantity based on min notional
     price_data = fetch_binance_prices()
-    price = price_data.get(binance_symbol, 0)
+    price = price_data.get(binance_symbol, 0.01)
     raw_quantity = max(0.01, 10 / price) if price > 0 else 0.01
 
     step_size, precision = get_binance_lot_size(binance_symbol)
@@ -190,20 +202,17 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
 
     quantity = round_quantity(raw_quantity, step_size, precision)
 
-    if buy_exchange == "Binance" and sell_exchange == "OtherExchange":
+    if buy_exchange == "Binance" and sell_exchange == "Kraken":
         buy_response = execute_binance_trade(binance_symbol, "BUY", quantity)
-        sell_response = execute_other_trade(name_map['other'], "SELL", quantity)
-
-        buy_price = float(buy_response.get('price', 0))
-        sell_price = float(sell_response.get('price', 0))
-        profit = sell_price - buy_price
+        sell_price = fetch_kraken_prices().get(kraken_symbol, 0)
+        profit = sell_price - float(buy_response.get('price', 0))
 
         trade_entry = {
             "time": time.strftime('%Y-%m-%d %H:%M:%S'),
             "symbol": symbol,
             "buy_exchange": buy_exchange,
             "sell_exchange": sell_exchange,
-            "buy_price": buy_price,
+            "buy_price": float(buy_response.get('price', 0)),
             "sell_price": sell_price,
             "quantity": quantity,
             "profit": profit,
@@ -214,17 +223,14 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
 
         return jsonify({
             "success": True,
-            "message": f"✅ Buy {symbol} on Binance, Sell on OtherExchange\nProfit: ${profit:.2f}",
-            "details": {"buy": buy_response, "sell": sell_response}
+            "message": f"✅ Buy {symbol} on Binance, Sell on Kraken\nProfit: ${profit:.2f}",
+            "details": {"buy": buy_response, "sell": {"price": sell_price}}
         })
 
-    elif buy_exchange == "OtherExchange" and sell_exchange == "Binance":
-        buy_response = execute_other_trade(name_map['other'], "buy", quantity)
+    elif buy_exchange == "Kraken" and sell_exchange == "Binance":
+        buy_price = fetch_kraken_prices().get(kraken_symbol, 0)
         sell_response = execute_binance_trade(binance_symbol, "SELL", quantity)
-
-        buy_price = float(buy_response.get('price', 0))
-        sell_price = float(sell_response.get('price', 0))
-        profit = sell_price - buy_price
+        profit = float(sell_response.get('price', 0)) - buy_price
 
         trade_entry = {
             "time": time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -232,7 +238,7 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
             "buy_exchange": buy_exchange,
             "sell_exchange": sell_exchange,
             "buy_price": buy_price,
-            "sell_price": sell_price,
+            "sell_price": float(sell_response.get('price', 0)),
             "quantity": quantity,
             "profit": profit,
             "status": "PROFIT" if profit > 0 else "LOSS"
@@ -242,8 +248,8 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
 
         return jsonify({
             "success": True,
-            "message": f"✅ Buy {symbol} on OtherExchange, Sell on Binance\nProfit: ${profit:.2f}",
-            "details": {"buy": buy_response, "sell": sell_response}
+            "message": f"✅ Buy {symbol} on Kraken, Sell on Binance\nProfit: ${profit:.2f}",
+            "details": {"buy": {"price": buy_price}, "sell": sell_response}
         })
     else:
         return jsonify({"success": False, "error": "Invalid exchange pair"})
