@@ -184,19 +184,22 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(updatePrices, 1000);
     updatePrices();
 });
-
+<script>
+// Always define functions before use
 function executeTrade(symbol, buyExchange, sellExchange) {
     fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
         .then(response => {
-            if (!response.ok) throw new Error("Network error");
+            if (!response.ok) {
+                throw new Error("Network response was not ok");
+            }
             return response.json();
         })
         .then(data => {
             alert(data.message || JSON.stringify(data));
         })
         .catch(error => {
-            console.error("Frontend JS error:", error);
-            alert("🚨 Trade failed:\nCheck browser console.");
+            console.error("Trade execution failed:", error);
+            alert("🚨 Trade failed. Check browser console.");
         });
 }
 </script>
