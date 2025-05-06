@@ -98,7 +98,7 @@ def get_binance_lot_size(symbol):
 
 def round_quantity(quantity, step_size, precision):
     rounded = round(quantity / step_size) * step_size
-    return float(f"{rounded:.{precision}f")
+    return float(f"{rounded:.{precision}f}")  # ✅ Fixed syntax
 
 # Execute Binance trade
 def execute_binance_trade(symbol, side, quantity):
