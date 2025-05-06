@@ -30,9 +30,9 @@ if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
 
 # Supported symbols
 SUPPORTED_SYMBOLS = {
-    'BTC': {'binance': 'BTCUSDT', 'kraken': 'XBTUSD'},
-    'ETH': {'binance': 'ETHUSDT', 'kraken': 'ETHUSD'},
-    'XRP': {'binance': 'XRPUSDT', 'kraken': 'XRPUSD'},
+    'BTC': {'binance': 'BTCUSDT', 'kraken': 'XXBTZUSD'},
+    'ETH': {'binance': 'ETHUSDT', 'kraken': 'XETHZUSD'},
+    'XRP': {'binance': 'XRPUSDT', 'kraken': 'XXRPZUSD'},
     'ADA': {'binance': 'ADAUSDT', 'kraken': 'ADAUSD'},
     'SOL': {'binance': 'SOLUSDT', 'kraken': 'SOLUSD'}
 }
