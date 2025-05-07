@@ -6,9 +6,9 @@
     <style>
         body {
             font-family: Arial;
-            background-color: #f4f6f9;
             margin: 0;
             padding: 0;
+            background-color: #f4f6f9;
         }
 
         h1 {
@@ -17,16 +17,22 @@
             color: #2c3e50;
         }
 
+        .balance-section {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin: 20px auto;
+            width: 90%;
+        }
+
         .balance-box {
-            width: 45%;
             background-color: #fff;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            display: inline-block;
-            vertical-align: top;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             text-align: center;
-            margin: 20px auto;
+            width: 45%;
+            min-width: 300px;
         }
 
         table {
@@ -84,6 +90,14 @@
             border-collapse: collapse;
             background-color: #fff;
         }
+
+        .trade-success {
+            color: green;
+        }
+
+        .trade-failed {
+            color: red;
+        }
     </style>
 </head>
 <body>
@@ -91,14 +105,22 @@
 <h1>Crypto Arbitrage Dashboard</h1>
 
 <!-- Balances -->
-<div style="text-align:center;">
+<div class="balance-section">
+    <!-- Binance USDT Balance -->
     <div class="balance-box">
         <h2>Binance USDT</h2>
-        <p><strong>{{ "%.2f"|format(binance_balance.USDT) }}</strong></p>
+        {% if binance_balance.success %}
+        <p><strong>Available:</strong> ${{ "%.2f"|format(binance_balance.data[0].free|float) }}</p>
+        <p><strong>Total:</strong> ${{ "%.2f"|format((binance_balance.data[0].free|float) + (binance_balance.data[0].locked|float)) }}</p>
+        {% else %}
+        <p style="color:red;">{{ binance_balance.error }}</p>
+        {% endif %}
     </div>
+
+    <!-- Kraken USD Balance -->
     <div class="balance-box">
         <h2>Kraken USD</h2>
-        <p><strong>{{ "%.2f"|format(kraken_balance.USD) }}</strong></p>
+        <p><strong>{{ "%.2f"|format(kraken_balance.data.USD) }}</strong></p>
     </div>
 </div>
 
@@ -133,24 +155,41 @@
 {% if trade_history %}
 <h2 style="text-align:center;">Recent Trades</h2>
 <table class="trade-history-table">
-    <tr><th>Time</th><th>Coin</th><th>Buy On</th><th>Sell On</th><th>Profit</th></tr>
+    <tr><th>Time</th><th>Coin</th><th>Buy On</th><th>Sell On</th><th>Profit ($)</th></tr>
     {% for trade in trade_history[:5] %}
     <tr class="{% if trade.profit > 0 %}highlight{% endif %}">
         <td>{{ trade.time }}</td>
         <td>{{ trade.symbol }}</td>
         <td>{{ trade.buy_exchange }}</td>
         <td>{{ trade.sell_exchange }}</td>
-        <td>${{ "%.2f"|format(trade.profit) }}</td>
+        <td class="{% if trade.profit > 0 %}trade-success{% elif trade.profit < 0 %}trade-failed{% endif %}">
+            ${{ "%.2f"|format(trade.profit) }}
+        </td>
     </tr>
     {% endfor %}
 </table>
 {% else %}
-<p style="text-align:center; margin-top:30px;">No trades yet.</p>
+<p style="text-align:center; margin-top:30px;">No trades executed yet.</p>
 {% endif %}
 
 <footer>Prices refresh every second...</footer>
 
 <script>
+function executeTrade(symbol, buyExchange, sellExchange) {
+    fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
+        .then(response => {
+            if (!response.ok) throw new Error("Network error");
+            return response.json();
+        })
+        .then(data => {
+            alert(data.message || JSON.stringify(data));
+        })
+        .catch(error => {
+            console.error("Frontend JS error:", error);
+            alert("🚨 Trade failed:\nCheck browser console.");
+        });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     async function updatePrices() {
         try {
@@ -171,7 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (prices.Binance && prices.Kraken) {
                     const diff = Math.abs(prices.Binance - prices.Kraken);
                     diffCell.innerHTML = `<strong>${diff.toFixed(2)}</strong>`;
-                    row.classList.toggle("highlight", diff > 50);  // Highlight when opportunity is meaningful
+                    row.classList.toggle("highlight", diff > 0.5);
                 } else {
                     diffCell.textContent = "N/A";
                 }
@@ -184,41 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(updatePrices, 1000);
     updatePrices();
 });
-<script>
-// Always define functions before use
-function executeTrade(symbol, buyExchange, sellExchange) {
-    fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error("Network response was not ok");
-            }
-            return response.json();
-        })
-        .then(data => {
-            alert(data.message || JSON.stringify(data));
-        })
-        .catch(error => {
-            console.error("Trade execution failed:", error);
-            alert("🚨 Trade failed. Check browser console.");
-        });
-}
 </script>
 
-</body>
-</html>
-<!-- All HTML content above -->
-
-<script>
-function executeTrade(symbol, buyExchange, sellExchange) {
-    fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
-        .then(response => response.json())
-        .then(data => {
-            alert(data.message || JSON.stringify(data));
-        })
-        .catch(error => {
-            console.error("Trade failed:", error);
-        });
-}
-</script>
 </body>
 </html>

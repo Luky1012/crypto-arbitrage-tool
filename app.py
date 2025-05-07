@@ -37,31 +37,31 @@ SUPPORTED_SYMBOLS = {
     'SOL': {'binance': 'SOLUSDT', 'kraken': 'SOLUSD'}
 }
 
-# Get Binance server time
+# Get server times
 def get_binance_server_time():
     url = f"{BINANCE_API_URL}/api/v3/time"
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         return response.json()['serverTime']
     except Exception as e:
         logger.error(f"Error fetching Binance server time: {e}")
         return int(time.time() * 1000)
 
-# Fetch prices from Binance
+# Fetch prices
 def fetch_binance_prices():
     prices = {}
     for symbol_info in SUPPORTED_SYMBOLS.values():
         try:
             res = requests.get(
                 f"{BINANCE_API_URL}/api/v3/ticker/price",
-                params={"symbol": symbol_info['binance']}
+                params={"symbol": symbol_info['binance']},
+                timeout=10
             )
             prices[symbol_info['binance']] = float(res.json()['price'])
         except Exception as e:
             logger.error(f"Error fetching {symbol_info['binance']} from Binance: {e}")
     return prices
 
-# Fetch prices from Kraken
 def fetch_kraken_prices():
     prices = {}
     for symbol_info in SUPPORTED_SYMBOLS.values():
@@ -73,8 +73,7 @@ def fetch_kraken_prices():
                 timeout=10
             )
             result = res.json()
-            price = float(result['result'][kraken_symbol]['c'][0])
-            prices[kraken_symbol] = price
+            prices[kraken_symbol] = float(result['result'][kraken_symbol]['c'][0])
         except Exception as e:
             logger.error(f"Error fetching {kraken_symbol} from Kraken: {e}")
             prices[kraken_symbol] = None
@@ -100,7 +99,7 @@ def get_binance_lot_size(symbol):
 
 def round_quantity(quantity, step_size, precision):
     rounded = round(quantity / step_size) * step_size
-    return float(f"{rounded:.{precision}f}")  # ✅ Fixed syntax
+    return float(f"{rounded:.{precision}f}")
 
 # Execute Binance trade
 def execute_binance_trade(symbol, side, quantity):
@@ -133,55 +132,71 @@ def execute_binance_trade(symbol, side, quantity):
     except Exception as e:
         return {"error": str(e)}
 
-# Simulate Kraken trades
+# Simulated Kraken trade execution
 def execute_kraken_trade(symbol, side, size):
-    # For now, just simulate successful trade
     return {
         "success": True,
         "price": fetch_kraken_prices().get(symbol, 0),
         "status": "filled"
     }
 
+# Fetch Binance balance
+@retry(tries=3, delay=1)
+def fetch_binance_balance():
+    try:
+        timestamp = get_binance_server_time()
+        query_string = f"timestamp={timestamp}"
+        signature = hmac.new(
+            BINANCE_SECRET_KEY.encode('utf-8'),
+            query_string.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+
+        headers = {"X-MBX-APIKEY": BINANCE_API_KEY}
+        params = {
+            "timestamp": timestamp,
+            "signature": signature
+        }
+
+        response = requests.get(
+            f"{BINANCE_API_URL}/api/v3/account",
+            headers=headers,
+            params=params
+        )
+
+        data = response.json()
+        balances = [
+            {"asset": asset["asset"], "free": asset["free"], "locked": asset["locked"]}
+            for asset in data.get("balances", [])
+            if float(asset.get("free", 0)) > 0 or float(asset.get("locked", 0)) > 0
+        ]
+        return {"success": True, "data": balances}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 # Global trade history list
 trade_history = []
 
 @app.route('/')
 def dashboard():
-    try:
-        binance_prices = fetch_binance_prices()
-        kraken_prices = fetch_kraken_prices()
+    binance_prices = fetch_binance_prices()
+    kraken_prices = fetch_kraken_prices()
 
-        crypto_data = {}
-        for symbol, names in SUPPORTED_SYMBOLS.items():
-            crypto_data[symbol] = {
-                "Binance": binance_prices.get(names['binance']),
-                "Kraken": kraken_prices.get(names['kraken'])
-            }
+    # Fetch balances
+    binance_balance = fetch_binance_balance()
 
-        # Simulated balances
-        binance_balance = {"USDT": 1000.0}
-        kraken_balance = {"USD": 1000.0}
-
-        return render_template(
-            'dashboard.html',
-            crypto_data=crypto_data,
-            binance_balance=binance_balance,
-            kraken_balance=kraken_balance,
-            trade_history=trade_history
-        )
-    except Exception as e:
-        logger.error(f"Error rendering dashboard: {e}")
-        return "Internal Server Error", 500
-    
-    # Simulated balance (will update once real balance API works)
-    binance_balance = {"USDT": 1000.0}
-    kraken_balance = {"USD": 1000.0}
+    crypto_data = {}
+    for symbol, names in SUPPORTED_SYMBOLS.items():
+        crypto_data[symbol] = {
+            "Binance": binance_prices.get(names['binance']),
+            "Kraken": kraken_prices.get(names['kraken'])
+        }
 
     return render_template(
         'dashboard.html',
         crypto_data=crypto_data,
         binance_balance=binance_balance,
-        kraken_balance=kraken_balance,
+        kraken_balance={"success": True, "data": {"USD": 1000.0}},
         trade_history=trade_history
     )
 
@@ -242,7 +257,10 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
         return jsonify({
             "success": True,
             "message": f"✅ Buy {symbol} on Binance, Sell on Kraken\nProfit: ${profit:.2f}",
-            "details": {"buy": buy_response, "sell": {"price": sell_price}}
+            "details": {
+                "buy": buy_response,
+                "sell": {"price": sell_price}
+            }
         })
 
     elif buy_exchange == "Kraken" and sell_exchange == "Binance":
@@ -267,7 +285,10 @@ def trigger_execute_trade(symbol, buy_exchange, sell_exchange):
         return jsonify({
             "success": True,
             "message": f"✅ Buy {symbol} on Kraken, Sell on Binance\nProfit: ${profit:.2f}",
-            "details": {"buy": {"price": buy_price}, "sell": sell_response}
+            "details": {
+                "buy": {"price": buy_price},
+                "sell": sell_response
+            }
         })
     else:
         return jsonify({"success": False, "error": "Invalid exchange pair"})
