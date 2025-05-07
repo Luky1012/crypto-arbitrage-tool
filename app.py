@@ -69,13 +69,15 @@ def fetch_kraken_prices():
         try:
             res = requests.get(
                 f"{KRAKEN_API_URL}/0/public/Ticker",
-                params={"pair": kraken_symbol}
+                params={"pair": kraken_symbol},
+                timeout=10
             )
             result = res.json()
             price = float(result['result'][kraken_symbol]['c'][0])
             prices[kraken_symbol] = price
         except Exception as e:
             logger.error(f"Error fetching {kraken_symbol} from Kraken: {e}")
+            prices[kraken_symbol] = None
     return prices
 
 # Quantity rounding
@@ -145,16 +147,32 @@ trade_history = []
 
 @app.route('/')
 def dashboard():
-    binance_prices = fetch_binance_prices()
-    kraken_prices = fetch_kraken_prices()
+    try:
+        binance_prices = fetch_binance_prices()
+        kraken_prices = fetch_kraken_prices()
 
-    crypto_data = {}
-    for symbol, names in SUPPORTED_SYMBOLS.items():
-        crypto_data[symbol] = {
-            "Binance": binance_prices.get(names['binance']),
-            "Kraken": kraken_prices.get(names['kraken'])
-        }
+        crypto_data = {}
+        for symbol, names in SUPPORTED_SYMBOLS.items():
+            crypto_data[symbol] = {
+                "Binance": binance_prices.get(names['binance']),
+                "Kraken": kraken_prices.get(names['kraken'])
+            }
 
+        # Simulated balances
+        binance_balance = {"USDT": 1000.0}
+        kraken_balance = {"USD": 1000.0}
+
+        return render_template(
+            'dashboard.html',
+            crypto_data=crypto_data,
+            binance_balance=binance_balance,
+            kraken_balance=kraken_balance,
+            trade_history=trade_history
+        )
+    except Exception as e:
+        logger.error(f"Error rendering dashboard: {e}")
+        return "Internal Server Error", 500
+    
     # Simulated balance (will update once real balance API works)
     binance_balance = {"USDT": 1000.0}
     kraken_balance = {"USD": 1000.0}

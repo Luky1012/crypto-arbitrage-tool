@@ -206,3 +206,19 @@ function executeTrade(symbol, buyExchange, sellExchange) {
 
 </body>
 </html>
+<!-- All HTML content above -->
+
+<script>
+function executeTrade(symbol, buyExchange, sellExchange) {
+    fetch(`/execute_trade/${symbol}/${buyExchange}/${sellExchange}`)
+        .then(response => response.json())
+        .then(data => {
+            alert(data.message || JSON.stringify(data));
+        })
+        .catch(error => {
+            console.error("Trade failed:", error);
+        });
+}
+</script>
+</body>
+</html>
